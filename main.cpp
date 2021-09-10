@@ -189,16 +189,24 @@ void CompareAllBacteria()
 		delete b1;
 	}
 }
-
+#include <chrono>
+#include <iostream>
 int main(int argc, char* argv[])
 {
-	time_t t1 = time(NULL);
+	using namespace std::chrono;
+
+	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
 	Init();
 	ReadInputFile("list.txt");
 	CompareAllBacteria();
 
-	time_t t2 = time(NULL);
-	printf("time elapsed: %lld seconds\n", t2 - t1);
+	high_resolution_clock::time_point t2 = high_resolution_clock::now();
+
+	auto duration = t1.time_since_epoch();
+	auto duration2 = t2.time_since_epoch();
+	auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
+	std::cout << diff.count() << std::endl;
 	return 0;
 }
