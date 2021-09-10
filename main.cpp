@@ -25,6 +25,7 @@ void Init()
 class Bacteria
 {
 private:
+	long* vector;
 	long* second;
 	long one_l[AA_NUMBER];
 	long indexs;
@@ -71,7 +72,9 @@ private:
 	}
 
 public:
-	long* vector;
+	long count;
+	double* tv;
+	long* ti;
 
 	Bacteria(char* filename)
 	{
@@ -100,22 +103,78 @@ public:
 			else if (ch != '\n')
 				cont_buffer(ch);
 		}
-		fclose(bacteria_file);
-	}
 
-	~Bacteria()
-	{
+		long total_plus_complement = total + complement;
+		double total_div_2 = total * 0.5;
+		int i_mod_aa_number = 0;
+		int i_div_aa_number = 0;
+		long i_mod_M1 = 0;
+		long i_div_M1 = 0;
+
+		double one_l_div_total[AA_NUMBER];
+		for (int i = 0; i < AA_NUMBER; i++)
+			one_l_div_total[i] = (double)one_l[i] / total_l;
+
+		double* second_div_total = new double[M1];
+		for (int i = 0; i < M1; i++)
+			second_div_total[i] = (double)second[i] / total_plus_complement;
+
+		count = 0;
+		double* t = new double[M];
+
+		for (long i = 0; i < M; i++)
+		{
+			double p1 = second_div_total[i_div_aa_number];
+			double p2 = one_l_div_total[i_mod_aa_number];
+			double p3 = second_div_total[i_mod_M1];
+			double p4 = one_l_div_total[i_div_M1];
+			double stochastic = (p1 * p2 + p3 * p4) * total_div_2;
+
+			if (i_mod_aa_number == AA_NUMBER - 1)
+			{
+				i_mod_aa_number = 0;
+				i_div_aa_number++;
+			}
+			else
+				i_mod_aa_number++;
+
+			if (i_mod_M1 == M1 - 1)
+			{
+				i_mod_M1 = 0;
+				i_div_M1++;
+			}
+			else
+				i_mod_M1++;
+
+			if (stochastic > EPSILON)
+			{
+				t[i] = (vector[i] - stochastic) / stochastic;
+				count++;
+			}
+			else
+				t[i] = 0;
+		}
+
+		delete second_div_total;
 		delete vector;
 		delete second;
-	}
 
-	double stochastic_compute(long i)
-	{
-		double p1 = (double)second[i / AA_NUMBER] / (total + complement);
-		double p2 = (double)one_l[i % AA_NUMBER] / total_l;
-		double p3 = (double)second[i % M1] / (total + complement);
-		double p4 = (double)one_l[i / M1] / total_l;
-		return total * (p1 * p2 + p3 * p4) / 2;
+		tv = new double[count];
+		ti = new long[count];
+
+		int pos = 0;
+		for (long i = 0; i < M; i++)
+		{
+			if (t[i] != 0)
+			{
+				tv[pos] = t[i];
+				ti[pos] = i;
+				pos++;
+			}
+		}
+		delete t;
+
+		fclose(bacteria_file);
 	}
 };
 
@@ -148,26 +207,44 @@ double CompareBacteria(Bacteria* b1, Bacteria* b2)
 	double correlation = 0;
 	double vector_len1 = 0;
 	double vector_len2 = 0;
-
-	for (long i = 0; i < M; i++)
+	long p1 = 0;
+	long p2 = 0;
+	while (p1 < b1->count && p2 < b2->count)
 	{
-		double stochastic1 = b1->stochastic_compute(i);
-		double t1;
-		if (stochastic1 > EPSILON)
-			t1 = (b1->vector[i] - stochastic1) / stochastic1;
+		long n1 = b1->ti[p1];
+		long n2 = b2->ti[p2];
+		if (n1 < n2)
+		{
+			double t1 = b1->tv[p1];
+			vector_len1 += (t1 * t1);
+			p1++;
+		}
+		else if (n2 < n1)
+		{
+			double t2 = b2->tv[p2];
+			p2++;
+			vector_len2 += (t2 * t2);
+		}
 		else
-			t1 = 0;
+		{
+			double t1 = b1->tv[p1++];
+			double t2 = b2->tv[p2++];
+			vector_len1 += (t1 * t1);
+			vector_len2 += (t2 * t2);
+			correlation += t1 * t2;
+		}
+	}
+	while (p1 < b1->count)
+	{
+		long n1 = b1->ti[p1];
+		double t1 = b1->tv[p1++];
 		vector_len1 += (t1 * t1);
-
-		double stochastic2 = b2->stochastic_compute(i);
-		double t2;
-		if (stochastic2 > EPSILON)
-			t2 = (b2->vector[i] - stochastic2) / stochastic2;
-		else
-			t2 = 0;
+	}
+	while (p2 < b2->count)
+	{
+		long n2 = b2->ti[p2];
+		double t2 = b2->tv[p2++];
 		vector_len2 += (t2 * t2);
-
-		correlation = correlation + t1 * t2;
 	}
 
 	return correlation / (sqrt(vector_len1) * sqrt(vector_len2));
@@ -175,20 +252,22 @@ double CompareBacteria(Bacteria* b1, Bacteria* b2)
 
 void CompareAllBacteria()
 {
-	for (int i = 0; i < number_bacteria - 1; i++)
+	Bacteria** b = new Bacteria * [number_bacteria];
+	for (int i = 0; i < number_bacteria; i++)
 	{
-		Bacteria* b1 = new Bacteria(bacteria_name[i]);
+		printf("load %d of %d\n", i + 1, number_bacteria);
+		b[i] = new Bacteria(bacteria_name[i]);
+	}
 
+	for (int i = 0; i < number_bacteria - 1; i++)
 		for (int j = i + 1; j < number_bacteria; j++)
 		{
-			Bacteria* b2 = new Bacteria(bacteria_name[j]);
-			double correlation = CompareBacteria(b1, b2);
-			printf("%03d %03d -> %.10lf\n", i, j, correlation);
-			delete b2;
+			printf("%2d %2d -> ", i, j);
+			double correlation = CompareBacteria(b[i], b[j]);
+			printf("%.20lf\n", correlation);
 		}
-		delete b1;
-	}
 }
+
 #include <chrono>
 #include <iostream>
 int main(int argc, char* argv[])
