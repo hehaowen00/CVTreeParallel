@@ -168,6 +168,9 @@ double CompareBacteria(Bacteria* b1, Bacteria* b2)
 			t2 = 0;
 		vector_len2 += (t2 * t2);
 
+        printf("%lf, %lf, %lf\n", correlation, t1, t2);
+        if (i == 10) { break; };
+
 		correlation = correlation + t1 * t2;
 	}
 
@@ -184,6 +187,7 @@ void CompareAllBacteria()
 		{
 			Bacteria* b2 = new Bacteria(bacteria_name[j]);
 			double correlation = CompareBacteria(b1, b2);
+            printf("%s %s\n", bacteria_name[i], bacteria_name[j]);
 			printf("%03d %03d -> %.10lf\n", i, j, correlation);
 			delete b2;
 		}
