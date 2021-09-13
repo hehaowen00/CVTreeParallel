@@ -6,7 +6,8 @@
 
 long M, M1, M2;
 short code[26] = {
-    0, 2, 1, 2, 3, 4, 5, 6, 7, -1, 8, 9, 10, 11, -1, 12, 13, 14, 15, 16, 1, 17, 18, 5, 19, 3
+ 0, 2, 1, 2, 3, 4, 5, 6, 7, -1, 8, 9, 10, 11,
+ -1, 12, 13, 14, 15, 16, 1, 17, 18, 5, 19, 3
 };
 
 #define encode(ch)  code[ch-'A']
@@ -129,6 +130,9 @@ void bacteria_init_buffer(Bacteria * b, char * buf)
     for (int i = 0; i < LEN-1; i++)
     {
         short enc = encode(buf[i]);
+    if (enc < 0) {
+        printf("%d, %ld\n", enc, b->one_l[enc]);
+    }
         b->one_l[enc]++;
         b->total_l++;
         b->indexs = b->indexs * AA_NUMBER + enc;
@@ -140,6 +144,9 @@ void bacteria_cont_buffer(Bacteria * b, char c)
 {
     short enc = encode(c);
     b->one_l[enc]++;
+    if (enc < 0) {
+        printf("%d, %ld\n", enc, b->one_l[enc]);
+    }
     b->total_l++;
     long index = b->indexs * AA_NUMBER + enc;
     b->vector[index]++;
@@ -150,6 +157,15 @@ void bacteria_cont_buffer(Bacteria * b, char c)
 
 double bacteria_compare(Bacteria *b1, Bacteria *b2)
 {
+    double correlation = 0;
+    double vector_len1 = 0;
+    double vector_len2 = 0;
+
+    for (long i = 0; i < M; i++)
+    {
+
+    }
+
     return 0;
 }
 
@@ -204,6 +220,7 @@ int main(int argc, char * argv[])
 // 2. Can we run the parallel code in a VM
 // 3. Writing it in C because Rust won't work properly D:
 // 4. Sad noises
+// 5. Can we preprocess the bacteria to find their frequency vectors at compile time
 
 /* total: 41036, total_l: 41816 */
 /* one_l: 2178, 1052, 2518, 2231, 2083, 1365, 945, 2731, 3010, 3870, 1147, 3310, 1642, 1597, 1926, 2662, 2362, 2803, 319, 2065, */
