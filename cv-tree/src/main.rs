@@ -1,15 +1,21 @@
 #![feature(const_for)]
 #![feature(const_mut_refs)]
-use std::{fs::{File}, io::{Read, BufReader, BufRead}, process::exit};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Read},
+    process::exit,
+};
 
 const AA_NUMBER: i64 = 20; // number of amino acids
 const LEN: i64 = 6;
 const EPSILON: f64 = 1e-010;
-const CODE: [i8; 26] = [ 0, 2, 1, 2, 3, 4, 5, 6, 7, -1, 8, 9, 10, 11, -1, 12, 13, 14, 15, 16, 1, 17, 18, 5, 19, 3 ];
+const CODE: [i8; 26] = [
+    0, 2, 1, 2, 3, 4, 5, 6, 7, -1, 8, 9, 10, 11, -1, 12, 13, 14, 15, 16, 1, 17, 18, 5, 19, 3,
+];
 
 const M2: i64 = {
     let mut i = 1;
-    let mut j =0;
+    let mut j = 0;
 
     while j < LEN - 2 {
         i *= AA_NUMBER;
@@ -27,7 +33,7 @@ const fn encode(ch: u8) -> i8 {
 #[derive(Debug)]
 struct Bacteria {
     second: Vec<i64>,
-    one_l: Vec<i64>,// [i64; AA_NUMBER as usize],
+    one_l: Vec<i64>, // [i64; AA_NUMBER as usize],
     indexs: i64,
     total: i64,
     total_l: i64,
@@ -78,25 +84,35 @@ impl Bacteria {
     }
 
     fn read(&mut self, filename: &str) {
-        let mut f = File::open(filename).unwrap();
-        let mut chars = String::new();
-        f.read_to_string(&mut chars).unwrap();
+        let f = File::open(filename).unwrap();
+        let mut reader = BufReader::new(f);
+        let mut s = reader.bytes();
+        // let mut chars = String::new();
+        // f.read_to_string(&mut chars).unwrap();
 
-        let mut buf: [u8; (LEN-1) as usize] = [0; (LEN-1) as usize];
-        let s: Vec<char> = chars.chars().collect();
-        let mut s = s.iter();
+        // let mut s = f.bytes();
 
-        while  let Some(mut ch) = s.next() {
-            if *ch == '>' {
-                while *ch != '\n' {
+        let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
+        // let s: Vec<char> = chars.chars().collect();
+        // let mut s = s.iter();
+
+        while let Some(mut ch) = s.next() {
+            let mut c = ch.unwrap() as char;
+            if c == '>' {
+                while c != '\n' {
                     ch = s.next().unwrap();
+                    c = ch.unwrap() as char;
                 }
-                for i in 0..(LEN -1) as usize {
-                    buf[i] = *s.next().unwrap() as u8;
+
+                // s.skip_while(|x| x != b'\n');
+                for i in 0..(LEN - 1) as usize {
+                    ch = s.next().unwrap();
+                    c = ch.unwrap() as char;
+                    buf[i] = c as u8;
                 }
                 self.init_buffer(&buf);
-            } else if ch.is_whitespace() == false {
-                self.cont_buffer(*ch as u8);
+            } else if c.is_whitespace() == false {
+                self.cont_buffer(c as u8);
             }
         }
 
@@ -111,7 +127,7 @@ impl Bacteria {
         for i in 0..AA_NUMBER {
             one_l_div_total[i as usize] = self.one_l[i as usize] as f64 / self.total_l as f64;
         }
-        
+
         let mut second_div_total = [0.0; M1 as usize].to_vec();
         for i in 0..M1 {
             second_div_total[i as usize] = self.second[i as usize] as f64 / total_complement as f64;
@@ -121,11 +137,11 @@ impl Bacteria {
         let mut t = [0.0; M as usize].to_vec();
 
         for i in 0..M {
-            let p1 = second_div_total[i_div_aa_number as usize]; 
+            let p1 = second_div_total[i_div_aa_number as usize];
             let p2 = one_l_div_total[i_mod_aa_number as usize];
             let p3 = second_div_total[i_mod_m1 as usize];
             let p4 = one_l_div_total[i_div_m1 as usize];
-            let sto  = (p1 * p2 + p3 * p4) * total_div_2;
+            let sto = (p1 * p2 + p3 * p4) * total_div_2;
 
             if i_mod_aa_number == AA_NUMBER as i32 - 1 {
                 i_mod_aa_number = 0;
@@ -134,7 +150,7 @@ impl Bacteria {
                 i_mod_aa_number += 1;
             }
 
-            if i_mod_m1 == M1-1 {
+            if i_mod_m1 == M1 - 1 {
                 i_mod_m1 = 0;
                 i_div_m1 += 1;
             } else {
@@ -151,7 +167,7 @@ impl Bacteria {
 
         drop(second_div_total);
         self.vector = vec![];
-        self.second = vec![]; 
+        self.second = vec![];
 
         for _ in 0..self.count {
             self.tv.push(0.0);
@@ -187,7 +203,7 @@ impl Bacteria {
                 p1 += 1;
             } else if n2 < n1 {
                 let t2 = rhs.tv[p2 as usize];
-                v_len2 += t2 * t2; 
+                v_len2 += t2 * t2;
                 p2 += 1;
             } else {
                 let t1 = self.tv[p1 as usize];
@@ -221,55 +237,55 @@ impl Bacteria {
         correlation / (v_len1.sqrt() * v_len2.sqrt())
     }
 
-//     fn stochastic(&self, i: i64) -> f64 {
-//         let total_complement: f64 = (self.total + self.complement) as f64;
-//         let p1: f64 = self.second[(i / AA_NUMBER) as usize] as f64 / (total_complement);
-//         let p2: f64 = self.one_l[(i % AA_NUMBER) as usize] as f64 / (self.total_l as f64);
-//         let p3: f64 = self.second[(i % M1) as usize] as f64 / total_complement;
-//         let p4: f64 = self.one_l[(i / M1) as  usize] as f64 / (self.total_l as f64);
-//         return self.total as f64 * (p1 * p2 + p3 * p4) / 2.0;
-//     }
+    //     fn stochastic(&self, i: i64) -> f64 {
+    //         let total_complement: f64 = (self.total + self.complement) as f64;
+    //         let p1: f64 = self.second[(i / AA_NUMBER) as usize] as f64 / (total_complement);
+    //         let p2: f64 = self.one_l[(i % AA_NUMBER) as usize] as f64 / (self.total_l as f64);
+    //         let p3: f64 = self.second[(i % M1) as usize] as f64 / total_complement;
+    //         let p4: f64 = self.one_l[(i / M1) as  usize] as f64 / (self.total_l as f64);
+    //         return self.total as f64 * (p1 * p2 + p3 * p4) / 2.0;
+    //     }
 
-//     fn compare(&self, other: &Self) -> f64 {
-//         let mut correlation: f64 = 0.0;
-//         let mut v_len1: f64 = 0.0;
-//         let mut v_len2: f64 = 0.0;
+    //     fn compare(&self, other: &Self) -> f64 {
+    //         let mut correlation: f64 = 0.0;
+    //         let mut v_len1: f64 = 0.0;
+    //         let mut v_len2: f64 = 0.0;
 
-//         for i in 0..M {
-//             let sto1 = self.stochastic(i as i64);
-//             let t1 = if sto1 > EPSILON {
-//                 (self.vector[i as usize] as f64 - sto1) / sto1
-//             } else {
-//                 0.0
-//             };
+    //         for i in 0..M {
+    //             let sto1 = self.stochastic(i as i64);
+    //             let t1 = if sto1 > EPSILON {
+    //                 (self.vector[i as usize] as f64 - sto1) / sto1
+    //             } else {
+    //                 0.0
+    //             };
 
-//             v_len1 += (t1 * t1);
+    //             v_len1 += (t1 * t1);
 
-//             let sto2 = other.stochastic(i as i64);
-//             let t2 = if sto2 > EPSILON {
-//                 (other.vector[i as usize] as f64 - sto2) / sto2
-//             } else {
-//                 0.0
-//             };
+    //             let sto2 = other.stochastic(i as i64);
+    //             let t2 = if sto2 > EPSILON {
+    //                 (other.vector[i as usize] as f64 - sto2) / sto2
+    //             } else {
+    //                 0.0
+    //             };
 
-//             v_len2 += (t2 * t2);
+    //             v_len2 += (t2 * t2);
 
-//             correlation = correlation + t1 * t2;
-//             if correlation == f64::NAN {
-//                 correlation = 0.0;
-//             }
+    //             correlation = correlation + t1 * t2;
+    //             if correlation == f64::NAN {
+    //                 correlation = 0.0;
+    //             }
 
-//            if v_len1 == f64::NAN {
-//                v_len1 = 0.0;
-//            }
+    //            if v_len1 == f64::NAN {
+    //                v_len1 = 0.0;
+    //            }
 
-//            if v_len2 == f64::NAN {
-//                v_len2 = 0.0;
-//            }
-            
-//         }
-//         correlation / (v_len1.sqrt() * v_len2.sqrt())
-//     }
+    //            if v_len2 == f64::NAN {
+    //                v_len2 = 0.0;
+    //            }
+
+    //         }
+    //         correlation / (v_len1.sqrt() * v_len2.sqrt())
+    //     }
 }
 
 fn compare_all(names: Vec<String>) {
@@ -280,10 +296,17 @@ fn compare_all(names: Vec<String>) {
         b.read(&names[i]);
         bacterias.push(b);
     }
+
+    for i in 0..names.len() {
+        for j in i + 1..names.len() {
+            let correlation = bacterias[i].compare(&bacterias[j]);
+            println!("{} {} -> {:.20}", i, j, correlation);
+        }
+    }
 }
 
 fn read_input_file(fname: &str) -> Vec<String> {
-    let  f = File::open(fname).unwrap();
+    let f = File::open(fname).unwrap();
     let reader = BufReader::new(f);
     let mut xs = Vec::new();
 
@@ -297,12 +320,17 @@ fn read_input_file(fname: &str) -> Vec<String> {
 }
 
 fn main() {
-//     let mut b1 = Bacteria::init_vectors();
-//     b1.read("../data/AcMNPV.faa");
-//     let mut b2 = Bacteria::init_vectors();
-//     b2.read("../data/AdhoNPV.faa");
+    //     let mut b1 = Bacteria::init_vectors();
+    //     b1.read("../data/AcMNPV.faa");
+    //     let mut b2 = Bacteria::init_vectors();
+    //     b2.read("../data/AdhoNPV.faa");
 
-//     println!("{}", b1.compare(&b2));
+    //     println!("{}", b1.compare(&b2));
+
+    let t1 = std::time::Instant::now();
     let names = read_input_file("list.txt");
     compare_all(names);
+    let t2 = std::time::Instant::now();
+    let diff = t2 - t1;
+    println!("{} milliseconds", diff.as_millis());
 }
