@@ -86,34 +86,19 @@ impl Bacteria {
     fn read(&mut self, filename: &str) {
         superluminal_perf::begin_event("file read start");
         let f = File::open(filename).unwrap();
-        let mut reader = BufReader::new(f);
-        let mut s = reader;
-        // let mut s = reader.bytes();
-        // let mut chars = String::new();
-        // f.read_to_string(&mut chars).unwrap();
-
-        // let mut s = f.bytes();
+        let mut s = BufReader::new(f);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
-        // let s: Vec<char> = chars.chars().collect();
-        // let mut s = s.iter();
         let mut ch: [u8; 1] = [0; 1];
         let mut bin = Vec::new();
         while let Ok(i) = s.read(&mut ch) {
             if i == 0 { break };
-            // let mut c = ch.unwrap() as char;
             if ch[0] == b'>' {
                 s.read_until(b'\n', &mut bin);
-                // while c != '\n' {
-                //     ch = s.next().unwrap();
-                //     c = ch.unwrap() as char;
-                // }
-                
+
                 s.read_exact(&mut buf);
-                // println!("{:?}", std::str::from_utf8(&buf));
                 self.init_buffer(&buf);
             } else if ch[0] != b'\n' && ch[0] != b'\r' {
-                // println!("{:?}", ch[0] as char);
                 self.cont_buffer(ch[0]);
             }
         }
