@@ -85,38 +85,29 @@ impl Bacteria {
     }
 
     fn read(&mut self, filename: &str) {
+        superluminal_perf::begin_event("file read start");
         let f = File::open(filename).unwrap();
-        let mut reader = BufReader::new(f);
-        let mut s = reader.bytes();
-        // let mut chars = String::new();
-        // f.read_to_string(&mut chars).unwrap();
-
-        // let mut s = f.bytes();
+        let mut s = BufReader::new(f);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
-        // let s: Vec<char> = chars.chars().collect();
-        // let mut s = s.iter();
-
-        while let Some(mut ch) = s.next() {
-            let mut c = ch.unwrap() as char;
-            if c == '>' {
-                while c != '\n' {
-                    ch = s.next().unwrap();
-                    c = ch.unwrap() as char;
-                }
-
-                // s.skip_while(|x| x != b'\n');
-                for i in 0..(LEN - 1) as usize {
-                    ch = s.next().unwrap();
-                    c = ch.unwrap() as char;
-                    buf[i] = c as u8;
-                }
+        let mut ch: [u8; 1] = [0; 1];
+        let mut sink = Vec::with_capacity(128);
+        while let Ok(i) = s.read(&mut ch) {
+            if i == 0 { break };
+            if ch[0] == b'>' {
+                let _ = s.read_until(b'\n', &mut sink);
+                let _ = s.read_exact(&mut buf);
                 self.init_buffer(&buf);
-            } else if c.is_whitespace() == false {
-                self.cont_buffer(c as u8);
+            } else if ch[0] != b'\n' && ch[0] != b'\r' {
+                self.cont_buffer(ch[0]);
             }
+
+            sink.clear();
         }
 
+        superluminal_perf::end_event();
+
+        superluminal_perf::begin_event("precompute");
         let total_complement = self.total + self.complement;
         let total_div_2: f64 = self.total as f64 * 0.5;
         let mut i_mod_aa_number: i32 = 0;
@@ -183,9 +174,11 @@ impl Bacteria {
                 pos += 1;
             }
         }
+        superluminal_perf::end_event();
     }
 
     fn compare(&self, rhs: &Self) -> f64 {
+        superluminal_perf::begin_event("compare start");
         let mut correlation: f64 = 0.0;
         let mut v_len1: f64 = 0.0;
         let mut v_len2: f64 = 0.0;
@@ -235,73 +228,29 @@ impl Bacteria {
             v_len2 += t2 * t2;
         }
 
-        correlation / (v_len1.sqrt() * v_len2.sqrt())
+        let res = correlation / (v_len1.sqrt() * v_len2.sqrt());
+        superluminal_perf::end_event();
+        res
     }
-
-    //     fn stochastic(&self, i: i64) -> f64 {
-    //         let total_complement: f64 = (self.total + self.complement) as f64;
-    //         let p1: f64 = self.second[(i / AA_NUMBER) as usize] as f64 / (total_complement);
-    //         let p2: f64 = self.one_l[(i % AA_NUMBER) as usize] as f64 / (self.total_l as f64);
-    //         let p3: f64 = self.second[(i % M1) as usize] as f64 / total_complement;
-    //         let p4: f64 = self.one_l[(i / M1) as  usize] as f64 / (self.total_l as f64);
-    //         return self.total as f64 * (p1 * p2 + p3 * p4) / 2.0;
-    //     }
-
-    //     fn compare(&self, other: &Self) -> f64 {
-    //         let mut correlation: f64 = 0.0;
-    //         let mut v_len1: f64 = 0.0;
-    //         let mut v_len2: f64 = 0.0;
-
-    //         for i in 0..M {
-    //             let sto1 = self.stochastic(i as i64);
-    //             let t1 = if sto1 > EPSILON {
-    //                 (self.vector[i as usize] as f64 - sto1) / sto1
-    //             } else {
-    //                 0.0
-    //             };
-
-    //             v_len1 += (t1 * t1);
-
-    //             let sto2 = other.stochastic(i as i64);
-    //             let t2 = if sto2 > EPSILON {
-    //                 (other.vector[i as usize] as f64 - sto2) / sto2
-    //             } else {
-    //                 0.0
-    //             };
-
-    //             v_len2 += (t2 * t2);
-
-    //             correlation = correlation + t1 * t2;
-    //             if correlation == f64::NAN {
-    //                 correlation = 0.0;
-    //             }
-
-    //            if v_len1 == f64::NAN {
-    //                v_len1 = 0.0;
-    //            }
-
-    //            if v_len2 == f64::NAN {
-    //                v_len2 = 0.0;
-    //            }
-
-    //         }
-    //         correlation / (v_len1.sqrt() * v_len2.sqrt())
-    //     }
 }
 
 fn compare_all(names: Vec<String>) {
     let mut bacterias = Vec::with_capacity(names.len());
     for i in 0..names.len() {
         println!("load {} of {}", i + 1, names.len());
+        superluminal_perf::begin_event("read one");
         let mut b = Bacteria::init_vectors();
         b.read(&names[i]);
+        superluminal_perf::end_event();
         bacterias.push(b);
     }
 
     for i in 0..names.len() {
         for j in i + 1..names.len() {
+            superluminal_perf::begin_event("compare one");
             let correlation = bacterias[i].compare(&bacterias[j]);
             println!("{} {} -> {:.20}", i, j, correlation);
+            superluminal_perf::end_event();
         }
     }
 }
@@ -321,47 +270,47 @@ fn read_input_file(fname: &str) -> Vec<String> {
 }
 
 fn main() {
-    //     let mut b1 = Bacteria::init_vectors();
-    //     b1.read("../data/AcMNPV.faa");
-    //     let mut b2 = Bacteria::init_vectors();
-    //     b2.read("../data/AdhoNPV.faa");
-
-    //     println!("{}", b1.compare(&b2));
-
-    // let t1 = std::time::Instant::now();
+    let t1 = std::time::Instant::now();
+    // superluminal_perf::begin_event("read input file");
     // let names = read_input_file("list.txt");
-    // compare_all(names);
-    // let t2 = std::time::Instant::now();
-    // let diff = t2 - t1;
-    // println!("{} milliseconds", diff.as_millis());
-    read_input_sse();
+    // superluminal_perf::end_event();
+
+    superluminal_perf::begin_event("read input file sse");
+    let names = read_input_sse("list.txt");
+    // println!("{:?}", names);
+    superluminal_perf::end_event();
+
+    compare_all(names);
+
+    let t2 = std::time::Instant::now();
+    let diff = t2 - t1;
+    println!("{} milliseconds", diff.as_millis());
 }
 
-fn read_input_sse() {
+fn read_input_sse(filename: &str) -> Vec<String> {
+    
     let p = state(|| Vec::<String>::new())
-        .skip(take_until(byte(b'\n')).skip(byte(b'\n')))
-        // .map(|(mut xs, a)| {
-        //     let s = unsafe { std::str::from_utf8_unchecked(a) };
-        //     let count = usize::from_str_radix(s, 10).unwrap();
-        //     xs.reserve(count);
-        //     xs
-        // })
-        .then(many1(take_until(byte(b'\n')).skip(byte(b'\n'))))
+        .skip(take_until_literal(b"\r\n").skip(slice(b"\r\n")))
+        .then(many1(take_until_literal(b"\r\n").skip(slice(b"\r\n"))))
         .map(|(mut xs, b)| {
             for set in b {
                 let s = unsafe { std::str::from_utf8_unchecked(set) };
                 xs.push(format!("data/{}.faa", s));
             }
             xs
+        })
+        .then(remaining()).map(|(mut xs, bytes)| {
+            let s = unsafe { std::str::from_utf8_unchecked(&bytes) };
+            xs.push(format!("data/{}.faa", s));
+            xs
         });
 
-    let mut f = File::open("list.txt").unwrap();
+    let mut f = File::open(filename).unwrap();
     let mut bytes = Vec::new();
     let _ = f.read_to_end(&mut bytes);
 
-    let s = bytes.to_stream();
-    let (_, lines) = p.parse(&s).unwrap();
-    println!("{:?}", lines);
+    let (_, lines) = p.parse(&bytes).unwrap();
+    return lines;
 }
 
 fn get_genome_sse() {
