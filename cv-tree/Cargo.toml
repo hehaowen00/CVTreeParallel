@@ -5,6 +5,10 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+debug = true
+
 [dependencies]
 # tokio = "1.11.0"
 # parsing = { git = "git@github.com:hehaowen00/parsing.git" }
+superluminal-perf = "0.1.0"
