@@ -90,17 +90,18 @@ impl Bacteria {
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
-        let mut bin = Vec::new();
+        let mut sink = Vec::with_capacity(128);
         while let Ok(i) = s.read(&mut ch) {
             if i == 0 { break };
             if ch[0] == b'>' {
-                s.read_until(b'\n', &mut bin);
-
-                s.read_exact(&mut buf);
+                let _ = s.read_until(b'\n', &mut sink);
+                let _ = s.read_exact(&mut buf);
                 self.init_buffer(&buf);
             } else if ch[0] != b'\n' && ch[0] != b'\r' {
                 self.cont_buffer(ch[0]);
             }
+
+            sink.clear();
         }
 
         superluminal_perf::end_event();
@@ -234,7 +235,6 @@ impl Bacteria {
 
 fn compare_all(names: Vec<String>) {
     let mut bacterias = Vec::with_capacity(names.len());
-    // superluminal_perf::begin_event("read all");
     for i in 0..names.len() {
         println!("load {} of {}", i + 1, names.len());
         superluminal_perf::begin_event("read one");
@@ -269,20 +269,13 @@ fn read_input_file(fname: &str) -> Vec<String> {
 }
 
 fn main() {
-    //     let mut b1 = Bacteria::init_vectors();
-    //     b1.read("../data/AcMNPV.faa");
-    //     let mut b2 = Bacteria::init_vectors();
-    //     b2.read("../data/AdhoNPV.faa");
-
-    //     println!("{}", b1.compare(&b2));
-
     let t1 = std::time::Instant::now();
     superluminal_perf::begin_event("read input file");
     let names = read_input_file("list.txt");
     superluminal_perf::end_event();
-    // superluminal_perf::begin_event("compute all");
+
     compare_all(names);
-    // superluminal_perf::end_event();
+
     let t2 = std::time::Instant::now();
     let diff = t2 - t1;
     println!("{} milliseconds", diff.as_millis());
