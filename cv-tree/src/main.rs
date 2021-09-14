@@ -269,18 +269,35 @@ fn read_input_file(fname: &str) -> Vec<String> {
     xs
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let t1 = std::time::Instant::now();
     // superluminal_perf::begin_event("read input file");
     // let names = read_input_file("list.txt");
     // superluminal_perf::end_event();
+    let num = num_cpus::get();
+
+    let (tx, rx) = async_channel::unbounded();
+    tx.send("hello world".to_string());
+
+    for i in 0..num {
+        let rx_c = rx.clone();
+        tokio::spawn(async move {
+            while let Ok(msg) = rx_c.recv().await {
+                println!("{}", msg);
+            }
+        });
+    }
 
     superluminal_perf::begin_event("read input file sse");
     let names = read_input_sse("list.txt");
     // println!("{:?}", names);
+    for name in names {
+        tx.send(name).await;
+    }
     superluminal_perf::end_event();
 
-    compare_all(names);
+    // compare_all(names);
 
     let t2 = std::time::Instant::now();
     let diff = t2 - t1;
@@ -288,7 +305,6 @@ fn main() {
 }
 
 fn read_input_sse(filename: &str) -> Vec<String> {
-    
     let p = state(|| Vec::<String>::new())
         .skip(take_until_literal(b"\r\n").skip(slice(b"\r\n")))
         .then(many1(take_until_literal(b"\r\n").skip(slice(b"\r\n"))))

@@ -12,3 +12,5 @@ debug = true
 parsing = { git = "https://github.com/hehaowen00/parsing.git" }
 tokio = { version = "1.11.0", features = ["full"] }
 superluminal-perf = "0.1.0"
+async-channel = "1.6.1"
+num_cpus = "1.13.0"
