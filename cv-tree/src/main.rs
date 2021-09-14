@@ -5,6 +5,7 @@ use std::{
     io::{BufRead, BufReader, Read},
     process::exit,
 };
+use parsing::prelude::*;
 
 const AA_NUMBER: i64 = 20; // number of amino acids
 const LEN: i64 = 6;
@@ -327,10 +328,41 @@ fn main() {
 
     //     println!("{}", b1.compare(&b2));
 
-    let t1 = std::time::Instant::now();
-    let names = read_input_file("list.txt");
-    compare_all(names);
-    let t2 = std::time::Instant::now();
-    let diff = t2 - t1;
-    println!("{} milliseconds", diff.as_millis());
+    // let t1 = std::time::Instant::now();
+    // let names = read_input_file("list.txt");
+    // compare_all(names);
+    // let t2 = std::time::Instant::now();
+    // let diff = t2 - t1;
+    // println!("{} milliseconds", diff.as_millis());
+    read_input_sse();
+}
+
+fn read_input_sse() {
+    let p = state(|| Vec::<String>::new())
+        .skip(take_until(byte(b'\n')).skip(byte(b'\n')))
+        // .map(|(mut xs, a)| {
+        //     let s = unsafe { std::str::from_utf8_unchecked(a) };
+        //     let count = usize::from_str_radix(s, 10).unwrap();
+        //     xs.reserve(count);
+        //     xs
+        // })
+        .then(many1(take_until(byte(b'\n')).skip(byte(b'\n'))))
+        .map(|(mut xs, b)| {
+            for set in b {
+                let s = unsafe { std::str::from_utf8_unchecked(set) };
+                xs.push(format!("data/{}.faa", s));
+            }
+            xs
+        });
+
+    let mut f = File::open("list.txt").unwrap();
+    let mut bytes = Vec::new();
+    let _ = f.read_to_end(&mut bytes);
+
+    let s = bytes.to_stream();
+    let (_, lines) = p.parse(&s).unwrap();
+    println!("{:?}", lines);
+}
+
+fn get_genome_sse() {
 }
