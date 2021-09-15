@@ -1,11 +1,7 @@
 #![feature(const_for)]
 #![feature(const_mut_refs)]
-// use std::{
-//     fs::File,
-//     io::{BufRead, BufReader, Read},
-//     process::exit,
-// };
 
+use chashmap::CHashMap;
 use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
 use tokio::fs::File;
@@ -37,13 +33,11 @@ const fn encode(ch: u8) -> i8 {
 
 #[derive(Debug, Clone)]
 struct Bacteria {
-    // second: Vec<i64>,
     one_l: Vec<i64>, // [i64; AA_NUMBER as usize],
     indexs: i64,
     total: i64,
     total_l: i64,
     complement: i64,
-    // vector: Vec<i64>,
     count: i64,
     tv: Vec<f64>,
     ti: Vec<i64>,
@@ -122,12 +116,10 @@ impl Bacteria {
         let mut i_mod_m1: i64 = 0;
         let mut i_div_m1: i64 = 0;
 
-        // let mut one_l_div_total = [0.0; AA_NUMBER as usize].to_vec();
         for i in 0..AA_NUMBER {
             one_l_div_total[i as usize] = self.one_l[i as usize] as f64 / self.total_l as f64;
         }
 
-        // let mut second_div_total = [0.0; M1 as usize].to_vec();
         for i in 0..M1 {
             second_div_total[i as usize] = second[i as usize] as f64 / total_complement as f64;
         }
@@ -238,17 +230,6 @@ impl Bacteria {
     }
 }
 
-async fn compare_all(bacterias: Arc<CHashMap<usize, Bacteria>>) {
-    for i in 0..41 {
-        for j in i + 1..41 {
-            superluminal_perf::begin_event("compare one");
-            let correlation = bacterias.get(&i).unwrap().compare(&bacterias.get(&j).unwrap());
-            // println!("{} {} -> {:.20}", i, j, correlation);
-            superluminal_perf::end_event(); 
-        }
-    }
-}
-
 async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str) {
     let f = File::open(fname).await.unwrap();
     let reader = BufReader::new(f);
@@ -279,7 +260,6 @@ async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: 
         bx.resize((M1 + AA_NUMBER) as usize, 0.0);
     }
 }
-use chashmap::CHashMap;
 
 async fn compare(i: usize, j: usize, bacterias: Arc<CHashMap<usize, Bacteria>>) {
     superluminal_perf::begin_event("compare one");
