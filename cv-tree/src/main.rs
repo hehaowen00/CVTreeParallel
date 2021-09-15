@@ -6,7 +6,8 @@
 //     process::exit,
 // };
 
-use parsing::prelude::*;
+use std::sync::atomic::AtomicPtr;
+use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 
@@ -34,7 +35,7 @@ const fn encode(ch: u8) -> i8 {
     CODE[(ch as u8 - 'A' as u8) as usize]
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Bacteria {
     // second: Vec<i64>,
     one_l: Vec<i64>, // [i64; AA_NUMBER as usize],
@@ -89,13 +90,19 @@ impl Bacteria {
         second[self.indexs as usize] += 1;
     }
 
-    async fn read(&mut self, filename: &str) {
+    async fn read(&mut self, filename: &str, a: &mut [i64], b: &mut [f64]) {
         superluminal_perf::begin_event("file read start");
         let f = File::open(filename).await.unwrap();
         let mut s = BufReader::new(f);
 
-        let mut vector = [0; (M as usize)].to_vec();
-        let mut second = [0; (M1 as usize)].to_vec();
+        // let mut vector = [0; (M as usize)].to_vec();
+        // let mut second = [0; (M1 as usize)].to_vec();
+
+        let (second, vector) = a.split_at_mut(M1 as usize);
+        // let vector = chunk.vector();
+        // let second_div_total = chunk.second_div_total();
+        // let one_l_div_total = chunk.one_l_div_total();
+        let (one_l_div_total, second_div_total) = b.split_at_mut(AA_NUMBER as usize);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
@@ -107,9 +114,9 @@ impl Bacteria {
             if ch[0] == b'>' {
                 let _ = s.read_until(b'\n', &mut sink).await;
                 let _ = s.read_exact(&mut buf).await;
-                self.init_buffer(&buf, &mut second);
+                self.init_buffer(&buf, second);
             } else if ch[0] != b'\n' && ch[0] != b'\r' {
-                self.cont_buffer(ch[0], &mut second, &mut vector);
+                self.cont_buffer(ch[0], second, vector);
             }
 
             sink.clear();
@@ -125,12 +132,12 @@ impl Bacteria {
         let mut i_mod_m1: i64 = 0;
         let mut i_div_m1: i64 = 0;
 
-        let mut one_l_div_total = [0.0; AA_NUMBER as usize].to_vec();
+        // let mut one_l_div_total = [0.0; AA_NUMBER as usize].to_vec();
         for i in 0..AA_NUMBER {
             one_l_div_total[i as usize] = self.one_l[i as usize] as f64 / self.total_l as f64;
         }
 
-        let mut second_div_total = [0.0; M1 as usize].to_vec();
+        // let mut second_div_total = [0.0; M1 as usize].to_vec();
         for i in 0..M1 {
             second_div_total[i as usize] = second[i as usize] as f64 / total_complement as f64;
         }
@@ -170,8 +177,6 @@ impl Bacteria {
         drop(second_div_total);
         drop(vector);
         drop(second);
-        // self.vector = vec![];
-        // self.second = vec![];
 
         for _ in 0..self.count {
             self.tv.push(0.0);
@@ -197,7 +202,6 @@ impl Bacteria {
 
         let mut p1: i64 = 0;
         let mut p2: i64 = 0;
-        let mut i = 0;
 
         while p1 < self.count && p2 < rhs.count {
             let n1 = self.ti[p1 as usize];
@@ -222,8 +226,6 @@ impl Bacteria {
                 v_len2 += (t2 * t2);
                 correlation += t1 * t2;
             }
-
-            i += 1;
         }
 
         while p1 < self.count {
@@ -246,61 +248,71 @@ impl Bacteria {
     }
 }
 
-async fn compare_all(names: Vec<String>) {
-    let mut bacterias = Vec::with_capacity(names.len());
-    for i in 0..names.len() {
-        println!("load {} of {}", i + 1, names.len());
-        superluminal_perf::begin_event("read one");
-        let mut b = Bacteria::init_vectors();
-        b.read(&names[i]).await;
-        superluminal_perf::end_event();
-        bacterias.push(b);
-    }
+// async fn compare_all(names: Vec<String>) {
+//     let mut bacterias = Vec::with_capacity(names.len());
+//     for i in 0..names.len() {
+//         println!("load {} of {}", i + 1, names.len());
+//         superluminal_perf::begin_event("read one");
+//         let mut b = Bacteria::init_vectors();
+//         b.read(&names[i]).await;
+//         superluminal_perf::end_event();
+//         bacterias.push(b);
+//     }
 
-    for i in 0..names.len() {
-        for j in i + 1..names.len() {
-            superluminal_perf::begin_event("compare one");
-            let correlation = bacterias[i].compare(&bacterias[j]);
-            println!("{} {} -> {:.20}", i, j, correlation);
-            superluminal_perf::end_event();
-        }
-    }
-}
+//     for i in 0..names.len() {
+//         for j in i + 1..names.len() {
+//             superluminal_perf::begin_event("compare one");
+//             let correlation = bacterias[i].compare(&bacterias[j]);
+//             println!("{} {} -> {:.20}", i, j, correlation);
+//             superluminal_perf::end_event();
+//         }
+//     }
+// }
 
-async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str) -> Vec<String> {
+async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str) {
     let f = File::open(fname).await.unwrap();
     let reader = BufReader::new(f);
-    let mut xs = Vec::new();
+    // let mut xs = Vec::new();
 
     let mut lines = reader.lines();
-    let count = lines.next_line().await.unwrap().unwrap();
+    let _ = lines.next_line().await.unwrap().unwrap();
     let mut i = 0;
     while let Some(line) = lines.next_line().await.unwrap() {
         // xs.push(format!("data/{}.faa", line));
-        tx.send((i, format!("data/{}.faa", line))).await;
+        let _ = tx.send((i, format!("data/{}.faa", line))).await;
         i += 1;
     }
-
-    xs
 }
 
 async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>) {
+    // let mut second = [0; (M1 as usize)].to_vec();
+    // let mut vector = [0; (M as usize)].to_vec();
+    let mut a = vec![0; (M1 + M) as usize];
+    let mut bx = vec![0.0; (M1 + AA_NUMBER) as usize];
+    // let mut chunk = Prealloc::new();
+
     while let Ok((index, filename)) = rx.recv().await {
         let mut b = Bacteria::init_vectors();
-        b.read(&filename).await;
+        b.read(&filename, &mut a, &mut bx).await;
         println!("loaded {}, {}", index, filename);
+
+        a.clear();
+        a.resize((M1 + M) as usize, 0);
+        bx.clear();
+        bx.resize((M1 + AA_NUMBER) as usize, 0.0);
     }
 }
 
 #[tokio::main]
 async fn main() {
     let mut handles = Vec::with_capacity(8);
+    let mut bacterias = vec![Bacteria::init_vectors(); 41];
+
     let (tx, rx) = async_channel::bounded(41);
-    let num = num_cpus::get();
+    let num = 10;
 
     for i in 0..num - 1 {
-        let rx_c = rx.clone();
-        let handle = tokio::spawn(load_bacteria(rx_c));
+        let handle = tokio::spawn(load_bacteria(rx.clone()));
         handles.push(handle);
     }
 
