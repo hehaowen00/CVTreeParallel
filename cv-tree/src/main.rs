@@ -266,7 +266,11 @@ async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str
     }
 }
 
-async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: Arc<CHashMap<usize, Bacteria>>) {
+async fn load_bacteria(
+    rx: async_channel::Receiver<(usize, String)>,
+    notifier: async_channel::Sender<usize>,
+    bacterias: Arc<CHashMap<usize, Bacteria>>
+) {
     let mut a = vec![0; (M1 + M) as usize];
     let mut bx = vec![0.0; (M1 + M + AA_NUMBER) as usize];
 
@@ -276,6 +280,7 @@ async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: 
         print!("loaded {}, {}\n", index, filename);
         
         bacterias.insert(index, b);
+        notifier.send(index).await;
 
         a.clear();
         a.resize((M1 + M) as usize, 0);
@@ -297,6 +302,7 @@ async fn main() {
     let mut handles = Vec::with_capacity(8);
     let mut bacterias = Arc::new(CHashMap::with_capacity(64));
     let (tx, rx) = async_channel::bounded(41);
+    let (tx1, rx1) = async_channel::bounded(41);
 
     for i in 0..41 {
         bacterias.insert(i, Bacteria::init_vectors());
@@ -304,9 +310,8 @@ async fn main() {
 
     let num = 10;
 
-    for i in 0..num - 1 {
-        let handle = tokio::spawn(load_bacteria(rx.clone(), bacterias.clone()));
-        handles.push(handle);
+    for i in 0..num  {
+        tokio::spawn(load_bacteria(rx.clone(), tx1.clone(), bacterias.clone()));
     }
 
     let t1 = std::time::Instant::now();
@@ -315,18 +320,27 @@ async fn main() {
     let names = read_input_file(tx, "list.txt").await;
     superluminal_perf::end_event();
 
-    load_bacteria(rx, bacterias.clone()).await;
+    load_bacteria(rx, tx1, bacterias.clone()).await;
 
-    while let Some(h) = handles.pop() {
-        h.await;
-    }
+    // while let Some(h) = handles.pop() {
+    //     h.await;
+    // }
 
-    for i in 0..41 {
-        for j in i + 1..41 {
-            let h = tokio::spawn(compare(i, j, bacterias.clone()));
+    let mut done = Vec::with_capacity(41);
+    while let Ok(index) = rx1.recv().await {
+        for i in &done {
+            let h = tokio::spawn(compare(*i, index, bacterias.clone()));
             handles.push(h);
         }
+        done.push(index);
     }
+
+    // for i in 0..41 {
+    //     for j in i + 1..41 {
+    //         let h = tokio::spawn(compare(i, j, bacterias.clone()));
+    //         handles.push(h);
+    //     }
+    // }
 
     while let Some(h) = handles.pop() {
         h.await;
