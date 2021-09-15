@@ -57,6 +57,7 @@ name = "cv-tree"
 version = "0.1.0"
 dependencies = [
  "async-channel",
+ "libc",
  "num_cpus",
  "parsing",
  "superluminal-perf",

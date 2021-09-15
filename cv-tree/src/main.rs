@@ -36,13 +36,13 @@ const fn encode(ch: u8) -> i8 {
 
 #[derive(Debug)]
 struct Bacteria {
-    second: Vec<i64>,
+    // second: Vec<i64>,
     one_l: Vec<i64>, // [i64; AA_NUMBER as usize],
     indexs: i64,
     total: i64,
     total_l: i64,
     complement: i64,
-    vector: Vec<i64>,
+    // vector: Vec<i64>,
     count: i64,
     tv: Vec<f64>,
     ti: Vec<i64>,
@@ -52,8 +52,8 @@ impl Bacteria {
     fn init_vectors() -> Self {
         Self {
             count: 0,
-            vector: [0; (M as usize)].to_vec(),
-            second: [0; (M1 as usize)].to_vec(),
+            // vector: [0; (M as usize)].to_vec(),
+            // second: [0; (M1 as usize)].to_vec(),
             one_l: [0; (AA_NUMBER as usize)].to_vec(),
             total: 0,
             total_l: 0,
@@ -64,7 +64,7 @@ impl Bacteria {
         }
     }
 
-    fn init_buffer(&mut self, s: &[u8]) {
+    fn init_buffer(&mut self, s: &[u8], second: &mut [i64]) {
         self.complement += 1;
         self.indexs = 0;
         for i in 0..LEN - 1 {
@@ -73,24 +73,29 @@ impl Bacteria {
             self.total_l += 1;
             self.indexs = self.indexs * AA_NUMBER as i64 + enc as i64;
         }
-        self.second[self.indexs as usize] += 1;
+        second[self.indexs as usize] += 1;
     }
 
-    fn cont_buffer(&mut self, ch: u8) {
+    fn cont_buffer(&mut self, ch: u8, second: &mut [i64], vector: &mut [i64]) {
         let enc = encode(ch as u8);
         self.one_l[enc as usize] += 1;
         self.total_l += 1;
         let index = self.indexs * AA_NUMBER + enc as i64;
-        self.vector[index as usize] += 1;
+        // self.vector[index as usize] += 1;
+        vector[index as usize] += 1;
         self.total += 1;
         self.indexs = (self.indexs % M2) * AA_NUMBER + enc as i64;
-        self.second[self.indexs as usize] += 1;
+        // self.second[self.indexs as usize] += 1;
+        second[self.indexs as usize] += 1;
     }
 
     async fn read(&mut self, filename: &str) {
         superluminal_perf::begin_event("file read start");
         let f = File::open(filename).await.unwrap();
         let mut s = BufReader::new(f);
+
+        let mut vector = [0; (M as usize)].to_vec();
+        let mut second = [0; (M1 as usize)].to_vec();
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
@@ -100,11 +105,11 @@ impl Bacteria {
                 break;
             };
             if ch[0] == b'>' {
-                let _ = s.read_until(b'\n', &mut sink);
-                let _ = s.read_exact(&mut buf);
-                self.init_buffer(&buf);
+                let _ = s.read_until(b'\n', &mut sink).await;
+                let _ = s.read_exact(&mut buf).await;
+                self.init_buffer(&buf, &mut second);
             } else if ch[0] != b'\n' && ch[0] != b'\r' {
-                self.cont_buffer(ch[0]);
+                self.cont_buffer(ch[0], &mut second, &mut vector);
             }
 
             sink.clear();
@@ -127,7 +132,7 @@ impl Bacteria {
 
         let mut second_div_total = [0.0; M1 as usize].to_vec();
         for i in 0..M1 {
-            second_div_total[i as usize] = self.second[i as usize] as f64 / total_complement as f64;
+            second_div_total[i as usize] = second[i as usize] as f64 / total_complement as f64;
         }
 
         self.count = 0;
@@ -155,7 +160,7 @@ impl Bacteria {
             }
 
             if sto > EPSILON {
-                t[i as usize] = (self.vector[i as usize] as f64 - sto) / sto;
+                t[i as usize] = (vector[i as usize] as f64 - sto) / sto;
                 self.count += 1;
             } else {
                 t[i as usize] = 0.0;
@@ -163,8 +168,10 @@ impl Bacteria {
         }
 
         drop(second_div_total);
-        self.vector = vec![];
-        self.second = vec![];
+        drop(vector);
+        drop(second);
+        // self.vector = vec![];
+        // self.second = vec![];
 
         for _ in 0..self.count {
             self.tv.push(0.0);
@@ -239,13 +246,13 @@ impl Bacteria {
     }
 }
 
-fn compare_all(names: Vec<String>) {
+async fn compare_all(names: Vec<String>) {
     let mut bacterias = Vec::with_capacity(names.len());
     for i in 0..names.len() {
         println!("load {} of {}", i + 1, names.len());
         superluminal_perf::begin_event("read one");
         let mut b = Bacteria::init_vectors();
-        b.read(&names[i]);
+        b.read(&names[i]).await;
         superluminal_perf::end_event();
         bacterias.push(b);
     }
@@ -277,32 +284,13 @@ async fn read_input_file(fname: &str) -> Vec<String> {
 #[tokio::main]
 async fn main() {
     let t1 = std::time::Instant::now();
-    // superluminal_perf::begin_event("read input file");
-    // let names = read_input_file("list.txt");
-    // superluminal_perf::end_event();
     let num = num_cpus::get();
-
-    // let (tx, rx) = async_channel::unbounded();
-    // tx.send("hello world".to_string());
-
-    // for i in 0..num {
-    //     let rx_c = rx.clone();
-    //     tokio::spawn(async move {
-    //         while let Ok(msg) = rx_c.recv().await {
-    //             println!("{}", msg);
-    //         }
-    //     });
-    // }
 
     superluminal_perf::begin_event("read input file sse");
     let names = read_input_file("list.txt").await;
-    // println!("{:?}", names);
-    // for name in names {
-    //     tx.send(name).await;
-    // }
     superluminal_perf::end_event();
 
-    compare_all(names);
+    compare_all(names).await;
 
     let t2 = std::time::Instant::now();
     let diff = t2 - t1;
