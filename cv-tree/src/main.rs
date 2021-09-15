@@ -86,11 +86,13 @@ impl Bacteria {
         let mut s = BufReader::new(f);
 
         let (second, vector) = a.split_at_mut(M1 as usize);
-        let (one_l_div_total, second_div_total) = b.split_at_mut(AA_NUMBER as usize);
+        let (one_l_div_total, m2) = b.split_at_mut(AA_NUMBER as usize);
+        let (second_div_total, t) = m2.split_at_mut(M1 as usize);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
         let mut sink = Vec::with_capacity(128);
+
         while let Ok(i) = s.read(&mut ch).await {
             if i == 0 {
                 break;
@@ -116,6 +118,31 @@ impl Bacteria {
         let mut i_mod_m1: i64 = 0;
         let mut i_div_m1: i64 = 0;
 
+        // let mut temp = [0.0; 20];
+
+        // #[cfg(target_feature = "avx")]
+        // unsafe {
+        //     use std::arch::x86_64::*;
+        //     for i in 0..AA_NUMBER / 4 {
+        //         let start = i as usize * 4;
+        //         let a = [
+        //             self.one_l[start] as f64,
+        //             self.one_l[start + 1] as f64,
+        //             self.one_l[start + 2] as f64,
+        //             self.one_l[start + 3] as f64
+        //         ];
+        //         let a = _mm256_loadu_pd(a.as_ptr());
+        //         let b: [f64; 4] = std::mem::transmute([self.total_l as f64; 4]);
+        //         let b = _mm256_loadu_pd(b.as_ptr());
+        //         let c = _mm256_div_pd(a, b);
+        //         let xs: [f64; 4] = std::mem::transmute(c);
+        //         one_l_div_total[start] = xs[0];
+        //         one_l_div_total[start + 1] = xs[1];
+        //         one_l_div_total[start + 2] = xs[2];
+        //         one_l_div_total[start + 3] = xs[3];
+        //     }
+        // }
+
         for i in 0..AA_NUMBER {
             one_l_div_total[i as usize] = self.one_l[i as usize] as f64 / self.total_l as f64;
         }
@@ -125,7 +152,6 @@ impl Bacteria {
         }
 
         self.count = 0;
-        let mut t = [0.0; M as usize].to_vec();
 
         for i in 0..M {
             let p1 = second_div_total[i_div_aa_number as usize];
@@ -155,10 +181,6 @@ impl Bacteria {
                 t[i as usize] = 0.0;
             }
         }
-
-        drop(second_div_total);
-        drop(vector);
-        drop(second);
 
         for _ in 0..self.count {
             self.tv.push(0.0);
@@ -245,7 +267,7 @@ async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str
 
 async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: Arc<CHashMap<usize, Bacteria>>) {
     let mut a = vec![0; (M1 + M) as usize];
-    let mut bx = vec![0.0; (M1 + AA_NUMBER) as usize];
+    let mut bx = vec![0.0; (M1 + M + AA_NUMBER) as usize];
 
     while let Ok((index, filename)) = rx.recv().await {
         let mut b = Bacteria::init_vectors();
@@ -257,7 +279,7 @@ async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: 
         a.clear();
         a.resize((M1 + M) as usize, 0);
         bx.clear();
-        bx.resize((M1 + AA_NUMBER) as usize, 0.0);
+        bx.resize((M1 + M + AA_NUMBER) as usize, 0.0);
     }
 }
 
