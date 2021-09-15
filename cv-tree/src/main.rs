@@ -267,30 +267,56 @@ async fn compare_all(names: Vec<String>) {
     }
 }
 
-async fn read_input_file(fname: &str) -> Vec<String> {
+async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str) -> Vec<String> {
     let f = File::open(fname).await.unwrap();
     let reader = BufReader::new(f);
     let mut xs = Vec::new();
 
     let mut lines = reader.lines();
     let count = lines.next_line().await.unwrap().unwrap();
+    let mut i = 0;
     while let Some(line) = lines.next_line().await.unwrap() {
-        xs.push(format!("data/{}.faa", line));
+        // xs.push(format!("data/{}.faa", line));
+        tx.send((i, format!("data/{}.faa", line))).await;
+        i += 1;
     }
 
     xs
 }
 
+async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>) {
+    while let Ok((index, filename)) = rx.recv().await {
+        let mut b = Bacteria::init_vectors();
+        b.read(&filename).await;
+        println!("loaded {}, {}", index, filename);
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    let t1 = std::time::Instant::now();
+    let mut handles = Vec::with_capacity(8);
+    let (tx, rx) = async_channel::bounded(41);
     let num = num_cpus::get();
 
+    for i in 0..num - 1 {
+        let rx_c = rx.clone();
+        let handle = tokio::spawn(load_bacteria(rx_c));
+        handles.push(handle);
+    }
+
+    let t1 = std::time::Instant::now();
+
     superluminal_perf::begin_event("read input file sse");
-    let names = read_input_file("list.txt").await;
+    let names = read_input_file(tx, "list.txt").await;
     superluminal_perf::end_event();
 
-    compare_all(names).await;
+    load_bacteria(rx).await;
+
+    for h in handles {
+        h.await;
+    }
+
+    // compare_all(tx, names).await;
 
     let t2 = std::time::Instant::now();
     let diff = t2 - t1;
