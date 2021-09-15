@@ -86,7 +86,7 @@ impl Bacteria {
 
         let (second, vector) = a.split_at_mut(M1 as usize);
         let (one_l_div_total, m2) = b.split_at_mut(AA_NUMBER as usize);
-        let (t, second_div_total) = m2.split_at_mut(M as usize);
+        let (second_div_total, t) = m2.split_at_mut(M1 as usize);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
@@ -266,7 +266,7 @@ async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: 
         a.clear();
         a.resize((M1 + M) as usize, 0);
         bx.clear();
-        bx.resize((M1 + AA_NUMBER) as usize, 0.0);
+        bx.resize((M1 + M + AA_NUMBER) as usize, 0.0);
     }
 }
 
