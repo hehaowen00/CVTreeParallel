@@ -53,8 +53,6 @@ impl Bacteria {
     fn init_vectors() -> Self {
         Self {
             count: 0,
-            // vector: [0; (M as usize)].to_vec(),
-            // second: [0; (M1 as usize)].to_vec(),
             one_l: [0; (AA_NUMBER as usize)].to_vec(),
             total: 0,
             total_l: 0,
@@ -82,11 +80,9 @@ impl Bacteria {
         self.one_l[enc as usize] += 1;
         self.total_l += 1;
         let index = self.indexs * AA_NUMBER + enc as i64;
-        // self.vector[index as usize] += 1;
         vector[index as usize] += 1;
         self.total += 1;
         self.indexs = (self.indexs % M2) * AA_NUMBER + enc as i64;
-        // self.second[self.indexs as usize] += 1;
         second[self.indexs as usize] += 1;
     }
 
@@ -95,13 +91,7 @@ impl Bacteria {
         let f = File::open(filename).await.unwrap();
         let mut s = BufReader::new(f);
 
-        // let mut vector = [0; (M as usize)].to_vec();
-        // let mut second = [0; (M1 as usize)].to_vec();
-
         let (second, vector) = a.split_at_mut(M1 as usize);
-        // let vector = chunk.vector();
-        // let second_div_total = chunk.second_div_total();
-        // let one_l_div_total = chunk.one_l_div_total();
         let (one_l_div_total, second_div_total) = b.split_at_mut(AA_NUMBER as usize);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
@@ -248,53 +238,40 @@ impl Bacteria {
     }
 }
 
-// async fn compare_all(names: Vec<String>) {
-//     let mut bacterias = Vec::with_capacity(names.len());
-//     for i in 0..names.len() {
-//         println!("load {} of {}", i + 1, names.len());
-//         superluminal_perf::begin_event("read one");
-//         let mut b = Bacteria::init_vectors();
-//         b.read(&names[i]).await;
-//         superluminal_perf::end_event();
-//         bacterias.push(b);
-//     }
-
-//     for i in 0..names.len() {
-//         for j in i + 1..names.len() {
-//             superluminal_perf::begin_event("compare one");
-//             let correlation = bacterias[i].compare(&bacterias[j]);
-//             println!("{} {} -> {:.20}", i, j, correlation);
-//             superluminal_perf::end_event();
-//         }
-//     }
-// }
+async fn compare_all(bacterias: Arc<CHashMap<usize, Bacteria>>) {
+    for i in 0..41 {
+        for j in i + 1..41 {
+            superluminal_perf::begin_event("compare one");
+            let correlation = bacterias.get(&i).unwrap().compare(&bacterias.get(&j).unwrap());
+            // println!("{} {} -> {:.20}", i, j, correlation);
+            superluminal_perf::end_event(); 
+        }
+    }
+}
 
 async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str) {
     let f = File::open(fname).await.unwrap();
     let reader = BufReader::new(f);
-    // let mut xs = Vec::new();
 
     let mut lines = reader.lines();
     let _ = lines.next_line().await.unwrap().unwrap();
     let mut i = 0;
     while let Some(line) = lines.next_line().await.unwrap() {
-        // xs.push(format!("data/{}.faa", line));
         let _ = tx.send((i, format!("data/{}.faa", line))).await;
         i += 1;
     }
 }
 
-async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>) {
-    // let mut second = [0; (M1 as usize)].to_vec();
-    // let mut vector = [0; (M as usize)].to_vec();
+async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: Arc<CHashMap<usize, Bacteria>>) {
     let mut a = vec![0; (M1 + M) as usize];
     let mut bx = vec![0.0; (M1 + AA_NUMBER) as usize];
-    // let mut chunk = Prealloc::new();
 
     while let Ok((index, filename)) = rx.recv().await {
         let mut b = Bacteria::init_vectors();
         b.read(&filename, &mut a, &mut bx).await;
         println!("loaded {}, {}", index, filename);
+        
+        bacterias.insert(index, b);
 
         a.clear();
         a.resize((M1 + M) as usize, 0);
@@ -302,17 +279,25 @@ async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>) {
         bx.resize((M1 + AA_NUMBER) as usize, 0.0);
     }
 }
+use chashmap::CHashMap;
+
+async fn compare(i: usize, j: usize, bacterias: Arc<CHashMap<usize, Bacteria>>) {
+    superluminal_perf::begin_event("compare one");
+    let b1 = bacterias.get(&i).unwrap();
+    let b2 = bacterias.get(&j).unwrap();
+    superluminal_perf::end_event(); 
+    println!("{:03} {:03} -> {}", i, j, b1.compare(&b2));
+}
 
 #[tokio::main]
 async fn main() {
     let mut handles = Vec::with_capacity(8);
-    let mut bacterias = vec![Bacteria::init_vectors(); 41];
-
+    let mut bacterias = Arc::new(CHashMap::with_capacity(64));
     let (tx, rx) = async_channel::bounded(41);
     let num = 10;
 
     for i in 0..num - 1 {
-        let handle = tokio::spawn(load_bacteria(rx.clone()));
+        let handle = tokio::spawn(load_bacteria(rx.clone(), bacterias.clone()));
         handles.push(handle);
     }
 
@@ -322,40 +307,25 @@ async fn main() {
     let names = read_input_file(tx, "list.txt").await;
     superluminal_perf::end_event();
 
-    load_bacteria(rx).await;
+    load_bacteria(rx, bacterias.clone()).await;
 
-    for h in handles {
+    while let Some(h) = handles.pop() {
         h.await;
     }
 
-    // compare_all(tx, names).await;
+    for i in 0..41 {
+        for j in i + 1..41 {
+            let h = tokio::spawn(compare(i, j, bacterias.clone()));
+            handles.push(h);
+        }
+    }
+
+    while let Some(h) = handles.pop() {
+        h.await;
+    }
 
     let t2 = std::time::Instant::now();
+
     let diff = t2 - t1;
     println!("{} milliseconds", diff.as_millis());
 }
-
-// async fn read_input_sse(filename: &str) -> Vec<String> {
-//     let p = state(|| Vec::<String>::new())
-//         .skip(take_until_literal(b"\r\n").skip(slice(b"\r\n")))
-//         .then(many1(take_until_literal(b"\r\n").skip(slice(b"\r\n"))))
-//         .map(|(mut xs, b)| {
-//             for set in b {
-//                 let s = unsafe { std::str::from_utf8_unchecked(set) };
-//                 xs.push(format!("data/{}.faa", s));
-//             }
-//             xs
-//         })
-//         .then(remaining()).map(|(mut xs, bytes)| {
-//             let s = unsafe { std::str::from_utf8_unchecked(&bytes) };
-//             xs.push(format!("data/{}.faa", s));
-//             xs
-//         });
-
-//     let mut f = File::open(filename).await.unwrap();
-//     let mut bytes = Vec::new();
-//     let _ = f.read_to_end(&mut bytes);
-
-//     let (_, lines) = p.parse(&bytes).unwrap();
-//     return lines;
-// }
