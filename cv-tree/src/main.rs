@@ -91,21 +91,24 @@ impl Bacteria {
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
-        let mut sink = Vec::with_capacity(128);
+        // let mut sink = Vec::with_capacity(110);
 
         while let Ok(i) = s.read(&mut ch).await {
             if i == 0 {
                 break;
             };
             if ch[0] == b'>' {
-                let _ = s.read_until(b'\n', &mut sink).await;
+                // let _ = s.read_until(b'\n', &mut sink).await;
+                while ch[0] != b'\n' {
+                    s.read(&mut ch).await;
+                }
                 let _ = s.read_exact(&mut buf).await;
                 self.init_buffer(&buf, second);
             } else if ch[0] != b'\n' && ch[0] != b'\r' {
                 self.cont_buffer(ch[0], second, vector);
             }
 
-            sink.clear();
+            // sink.clear();
         }
 
         superluminal_perf::end_event();
@@ -182,14 +185,12 @@ impl Bacteria {
             }
         }
 
-        for _ in 0..self.count {
-            self.tv.push(0.0);
-            self.ti.push(0);
-        }
+        self.ti.resize(self.count as usize, 0);
+        self.tv.resize(self.count as usize, 0.0);
 
         let mut pos = 0;
         for i in 0..M {
-            if t[i as usize] != 0.0 {
+            if t[i as usize] != 0.0 { 
                 self.tv[pos] = t[i as usize];
                 self.ti[pos] = i;
                 pos += 1;
@@ -270,9 +271,9 @@ async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: 
     let mut bx = vec![0.0; (M1 + M + AA_NUMBER) as usize];
 
     while let Ok((index, filename)) = rx.recv().await {
-        let mut b = Bacteria::init_vectors();
+        let mut b = bacterias.remove(&index).unwrap();
         b.read(&filename, &mut a, &mut bx).await;
-        println!("loaded {}, {}", index, filename);
+        print!("loaded {}, {}\n", index, filename);
         
         bacterias.insert(index, b);
 
@@ -288,7 +289,7 @@ async fn compare(i: usize, j: usize, bacterias: Arc<CHashMap<usize, Bacteria>>) 
     let b1 = bacterias.get(&i).unwrap();
     let b2 = bacterias.get(&j).unwrap();
     superluminal_perf::end_event(); 
-    println!("{:03} {:03} -> {}", i, j, b1.compare(&b2));
+    print!("{:03} {:03} -> {}\n", i, j, b1.compare(&b2));
 }
 
 #[tokio::main]
@@ -296,6 +297,11 @@ async fn main() {
     let mut handles = Vec::with_capacity(8);
     let mut bacterias = Arc::new(CHashMap::with_capacity(64));
     let (tx, rx) = async_channel::bounded(41);
+
+    for i in 0..41 {
+        bacterias.insert(i, Bacteria::init_vectors());
+    }
+
     let num = 10;
 
     for i in 0..num - 1 {
