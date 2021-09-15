@@ -1,8 +1,13 @@
 #![feature(const_for)]
 #![feature(const_mut_refs)]
+// use std::{
+//     fs::File,
+//     io::{BufRead, BufReader, Read},
+//     process::exit,
+// };
+
 use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
-use chashmap::CHashMap;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 
@@ -32,11 +37,13 @@ const fn encode(ch: u8) -> i8 {
 
 #[derive(Debug, Clone)]
 struct Bacteria {
+    // second: Vec<i64>,
     one_l: Vec<i64>, // [i64; AA_NUMBER as usize],
     indexs: i64,
     total: i64,
     total_l: i64,
     complement: i64,
+    // vector: Vec<i64>,
     count: i64,
     tv: Vec<f64>,
     ti: Vec<i64>,
@@ -85,8 +92,7 @@ impl Bacteria {
         let mut s = BufReader::new(f);
 
         let (second, vector) = a.split_at_mut(M1 as usize);
-        let (one_l_div_total, m2) = b.split_at_mut(AA_NUMBER as usize);
-        let (second_div_total, t) = m2.split_at_mut(M1 as usize);
+        let (one_l_div_total, second_div_total) = b.split_at_mut(AA_NUMBER as usize);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
@@ -116,31 +122,18 @@ impl Bacteria {
         let mut i_mod_m1: i64 = 0;
         let mut i_div_m1: i64 = 0;
 
-        // #[cfg(all(
-        //     any(target_arch = "x86", target_arch = "x86_64"),
-        //     target_feature = "sse4.2"
-        // ))]
-        // {
-        //     for i in AA_NUMBER / 4 {
-        //         let start = i * 4;
-        //         let end = (i * 4) + 4;
-        //         let slice = self.one_l[start..end];
-        //         one_l_div_total[]
-        //     }
-        //     for i in 0..M1 {
-
-        //     }
-        // }
+        // let mut one_l_div_total = [0.0; AA_NUMBER as usize].to_vec();
         for i in 0..AA_NUMBER {
             one_l_div_total[i as usize] = self.one_l[i as usize] as f64 / self.total_l as f64;
         }
 
+        // let mut second_div_total = [0.0; M1 as usize].to_vec();
         for i in 0..M1 {
             second_div_total[i as usize] = second[i as usize] as f64 / total_complement as f64;
         }
 
         self.count = 0;
-        // let mut t = [0.0; M as usize].to_vec();
+        let mut t = [0.0; M as usize].to_vec();
 
         for i in 0..M {
             let p1 = second_div_total[i_div_aa_number as usize];
@@ -171,8 +164,14 @@ impl Bacteria {
             }
         }
 
-        self.tv.resize(self.count as usize, 0.0);
-        self.ti.resize(self.count as usize, 0);
+        drop(second_div_total);
+        drop(vector);
+        drop(second);
+
+        for _ in 0..self.count {
+            self.tv.push(0.0);
+            self.ti.push(0);
+        }
 
         let mut pos = 0;
         for i in 0..M {
@@ -239,6 +238,17 @@ impl Bacteria {
     }
 }
 
+async fn compare_all(bacterias: Arc<CHashMap<usize, Bacteria>>) {
+    for i in 0..41 {
+        for j in i + 1..41 {
+            superluminal_perf::begin_event("compare one");
+            let correlation = bacterias.get(&i).unwrap().compare(&bacterias.get(&j).unwrap());
+            // println!("{} {} -> {:.20}", i, j, correlation);
+            superluminal_perf::end_event(); 
+        }
+    }
+}
+
 async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str) {
     let f = File::open(fname).await.unwrap();
     let reader = BufReader::new(f);
@@ -254,7 +264,7 @@ async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str
 
 async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: Arc<CHashMap<usize, Bacteria>>) {
     let mut a = vec![0; (M1 + M) as usize];
-    let mut bx = vec![0.0; (M1 + M + AA_NUMBER) as usize];
+    let mut bx = vec![0.0; (M1 + AA_NUMBER) as usize];
 
     while let Ok((index, filename)) = rx.recv().await {
         let mut b = Bacteria::init_vectors();
@@ -266,16 +276,17 @@ async fn load_bacteria(rx: async_channel::Receiver<(usize, String)>, bacterias: 
         a.clear();
         a.resize((M1 + M) as usize, 0);
         bx.clear();
-        bx.resize((M1 + M + AA_NUMBER) as usize, 0.0);
+        bx.resize((M1 + AA_NUMBER) as usize, 0.0);
     }
 }
+use chashmap::CHashMap;
 
 async fn compare(i: usize, j: usize, bacterias: Arc<CHashMap<usize, Bacteria>>) {
     superluminal_perf::begin_event("compare one");
     let b1 = bacterias.get(&i).unwrap();
     let b2 = bacterias.get(&j).unwrap();
     superluminal_perf::end_event(); 
-    println!("{:03} {:03} -> {:.10}", i, j, b1.compare(&b2));
+    println!("{:03} {:03} -> {}", i, j, b1.compare(&b2));
 }
 
 #[tokio::main]
