@@ -1,11 +1,14 @@
 #![feature(const_for)]
 #![feature(const_mut_refs)]
-use std::{
-    fs::File,
-    io::{BufRead, BufReader, Read},
-    process::exit,
-};
+// use std::{
+//     fs::File,
+//     io::{BufRead, BufReader, Read},
+//     process::exit,
+// };
+
 use parsing::prelude::*;
+use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 
 const AA_NUMBER: i64 = 20; // number of amino acids
 const LEN: i64 = 6;
@@ -84,16 +87,18 @@ impl Bacteria {
         self.second[self.indexs as usize] += 1;
     }
 
-    fn read(&mut self, filename: &str) {
+    async fn read(&mut self, filename: &str) {
         superluminal_perf::begin_event("file read start");
-        let f = File::open(filename).unwrap();
+        let f = File::open(filename).await.unwrap();
         let mut s = BufReader::new(f);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
         let mut sink = Vec::with_capacity(128);
-        while let Ok(i) = s.read(&mut ch) {
-            if i == 0 { break };
+        while let Ok(i) = s.read(&mut ch).await {
+            if i == 0 {
+                break;
+            };
             if ch[0] == b'>' {
                 let _ = s.read_until(b'\n', &mut sink);
                 let _ = s.read_exact(&mut buf);
@@ -255,15 +260,15 @@ fn compare_all(names: Vec<String>) {
     }
 }
 
-fn read_input_file(fname: &str) -> Vec<String> {
-    let f = File::open(fname).unwrap();
+async fn read_input_file(fname: &str) -> Vec<String> {
+    let f = File::open(fname).await.unwrap();
     let reader = BufReader::new(f);
     let mut xs = Vec::new();
 
     let mut lines = reader.lines();
-    let count = lines.next().unwrap().unwrap();
-    for line in lines {
-        xs.push(format!("data/{}.faa", line.unwrap()));
+    let count = lines.next_line().await.unwrap().unwrap();
+    while let Some(line) = lines.next_line().await.unwrap() {
+        xs.push(format!("data/{}.faa", line));
     }
 
     xs
@@ -277,57 +282,54 @@ async fn main() {
     // superluminal_perf::end_event();
     let num = num_cpus::get();
 
-    let (tx, rx) = async_channel::unbounded();
-    tx.send("hello world".to_string());
+    // let (tx, rx) = async_channel::unbounded();
+    // tx.send("hello world".to_string());
 
-    for i in 0..num {
-        let rx_c = rx.clone();
-        tokio::spawn(async move {
-            while let Ok(msg) = rx_c.recv().await {
-                println!("{}", msg);
-            }
-        });
-    }
+    // for i in 0..num {
+    //     let rx_c = rx.clone();
+    //     tokio::spawn(async move {
+    //         while let Ok(msg) = rx_c.recv().await {
+    //             println!("{}", msg);
+    //         }
+    //     });
+    // }
 
     superluminal_perf::begin_event("read input file sse");
-    let names = read_input_sse("list.txt");
+    let names = read_input_file("list.txt").await;
     // println!("{:?}", names);
-    for name in names {
-        tx.send(name).await;
-    }
+    // for name in names {
+    //     tx.send(name).await;
+    // }
     superluminal_perf::end_event();
 
-    // compare_all(names);
+    compare_all(names);
 
     let t2 = std::time::Instant::now();
     let diff = t2 - t1;
     println!("{} milliseconds", diff.as_millis());
 }
 
-fn read_input_sse(filename: &str) -> Vec<String> {
-    let p = state(|| Vec::<String>::new())
-        .skip(take_until_literal(b"\r\n").skip(slice(b"\r\n")))
-        .then(many1(take_until_literal(b"\r\n").skip(slice(b"\r\n"))))
-        .map(|(mut xs, b)| {
-            for set in b {
-                let s = unsafe { std::str::from_utf8_unchecked(set) };
-                xs.push(format!("data/{}.faa", s));
-            }
-            xs
-        })
-        .then(remaining()).map(|(mut xs, bytes)| {
-            let s = unsafe { std::str::from_utf8_unchecked(&bytes) };
-            xs.push(format!("data/{}.faa", s));
-            xs
-        });
+// async fn read_input_sse(filename: &str) -> Vec<String> {
+//     let p = state(|| Vec::<String>::new())
+//         .skip(take_until_literal(b"\r\n").skip(slice(b"\r\n")))
+//         .then(many1(take_until_literal(b"\r\n").skip(slice(b"\r\n"))))
+//         .map(|(mut xs, b)| {
+//             for set in b {
+//                 let s = unsafe { std::str::from_utf8_unchecked(set) };
+//                 xs.push(format!("data/{}.faa", s));
+//             }
+//             xs
+//         })
+//         .then(remaining()).map(|(mut xs, bytes)| {
+//             let s = unsafe { std::str::from_utf8_unchecked(&bytes) };
+//             xs.push(format!("data/{}.faa", s));
+//             xs
+//         });
 
-    let mut f = File::open(filename).unwrap();
-    let mut bytes = Vec::new();
-    let _ = f.read_to_end(&mut bytes);
+//     let mut f = File::open(filename).await.unwrap();
+//     let mut bytes = Vec::new();
+//     let _ = f.read_to_end(&mut bytes);
 
-    let (_, lines) = p.parse(&bytes).unwrap();
-    return lines;
-}
-
-fn get_genome_sse() {
-}
+//     let (_, lines) = p.parse(&bytes).unwrap();
+//     return lines;
+// }
