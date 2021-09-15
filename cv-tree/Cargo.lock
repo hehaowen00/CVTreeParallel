@@ -70,7 +70,6 @@ dependencies = [
  "chashmap",
  "libc",
  "num_cpus",
- "parsing",
  "superluminal-perf",
  "tokio",
 ]
@@ -249,11 +248,6 @@ dependencies = [
  "smallvec 1.6.1",
  "winapi",
 ]
-
-[[package]]
-name = "parsing"
-version = "0.1.0"
-source = "git+https://github.com/hehaowen00/parsing.git#232a8a55316062a4fd5215759ddd8db9c13a5677"
 
 [[package]]
 name = "pin-project-lite"

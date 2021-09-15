@@ -91,24 +91,24 @@ impl Bacteria {
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
-        // let mut sink = Vec::with_capacity(110);
+        let mut sink = Vec::with_capacity(110);
 
         while let Ok(i) = s.read(&mut ch).await {
             if i == 0 {
                 break;
             };
             if ch[0] == b'>' {
-                // let _ = s.read_until(b'\n', &mut sink).await;
-                while ch[0] != b'\n' {
-                    s.read(&mut ch).await;
-                }
+                let _ = s.read_until(b'\n', &mut sink).await;
+                // while ch[0] != b'\n' {
+                //     s.read(&mut ch).await;
+                // }
                 let _ = s.read_exact(&mut buf).await;
                 self.init_buffer(&buf, second);
             } else if ch[0] != b'\n' && ch[0] != b'\r' {
                 self.cont_buffer(ch[0], second, vector);
             }
 
-            // sink.clear();
+            sink.clear();
         }
 
         superluminal_perf::end_event();
@@ -234,14 +234,14 @@ impl Bacteria {
         }
 
         while p1 < self.count {
-            let n1 = self.ti[p1 as usize];
+            // let n1 = self.ti[p1 as usize]; // does nothing
             let t1 = self.tv[p1 as usize];
             p1 += 1;
             v_len1 += t1 * t1;
         }
 
         while p2 < rhs.count {
-            let n2 = rhs.ti[p2 as usize];
+            // let n2 = rhs.ti[p2 as usize]; // does nothing
             let t2 = rhs.tv[p2 as usize];
             p2 += 1;
             v_len2 += t2 * t2;
@@ -320,7 +320,7 @@ async fn main() {
     let names = read_input_file(tx, "list.txt").await;
     superluminal_perf::end_event();
 
-    load_bacteria(rx, tx1, bacterias.clone()).await;
+    // load_bacteria(rx, tx1, bacterias.clone()).await;
 
     // while let Some(h) = handles.pop() {
     //     h.await;
@@ -328,11 +328,14 @@ async fn main() {
 
     let mut done = Vec::with_capacity(41);
     while let Ok(index) = rx1.recv().await {
-        for i in &done {
-            let h = tokio::spawn(compare(*i, index, bacterias.clone()));
+        for j in &done {
+            let h = tokio::spawn(compare(index, *j, bacterias.clone()));
             handles.push(h);
         }
         done.push(index);
+        if done.len() == 41 {
+            break;
+        }
     }
 
     // for i in 0..41 {

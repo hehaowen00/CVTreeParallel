@@ -1,5 +1,5 @@
 // all with async channel
-
+// these are bacteria loading only times, no comparisons done
 // 11 13241
 // 10 12927
 // 9 12979
