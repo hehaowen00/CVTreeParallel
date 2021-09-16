@@ -39,8 +39,9 @@ struct Bacteria {
     total_l: i64,
     complement: i64,
     count: i64,
-    tv: Vec<f64>,
-    ti: Vec<i64>,
+    cs: Vec<(i64, f64)>,
+    // tv: Vec<f64>,
+    // ti: Vec<i64>,
 }
 
 impl Bacteria {
@@ -52,8 +53,9 @@ impl Bacteria {
             total_l: 0,
             complement: 0,
             indexs: 0,
-            tv: vec![],
-            ti: vec![],
+            cs: Vec::new(),
+            // tv: vec![],
+            // ti: vec![],
         }
     }
 
@@ -86,8 +88,8 @@ impl Bacteria {
         let mut s = BufReader::new(f);
 
         let (second, vector) = a.split_at_mut(M1 as usize);
-        let (one_l_div_total, m2) = b.split_at_mut(AA_NUMBER as usize);
-        let (second_div_total, t) = m2.split_at_mut(M1 as usize);
+        let (one_l_div_total, second_div_total) = b.split_at_mut(AA_NUMBER as usize);
+        // let (second_div_total, t) = m2.split_at_mut(M1 as usize);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
         let mut ch: [u8; 1] = [0; 1];
@@ -177,25 +179,38 @@ impl Bacteria {
                 i_mod_m1 += 1;
             }
 
+            // if sto > EPSILON {
+            //     t[i as usize] = (vector[i as usize] as f64 - sto) / sto;
+            //     self.count += 1;
+            // } else {
+            //     t[i as usize] = 0.0;
+            // }
+
             if sto > EPSILON {
-                t[i as usize] = (vector[i as usize] as f64 - sto) / sto;
+                let r = (vector[i as usize] as f64 - sto) / sto;
+                self.cs.push((i, r));
                 self.count += 1;
-            } else {
-                t[i as usize] = 0.0;
             }
         }
 
-        self.ti.resize(self.count as usize, 0);
-        self.tv.resize(self.count as usize, 0.0);
+        // println!("{:?}", &t[0..100]);
+        // println!("{:?}", &self.cs);
 
-        let mut pos = 0;
-        for i in 0..M {
-            if t[i as usize] != 0.0 { 
-                self.tv[pos] = t[i as usize];
-                self.ti[pos] = i;
-                pos += 1;
-            }
-        }
+//         self.ti.resize(self.count as usize, 0);
+//         self.tv.resize(self.count as usize, 0.0);
+
+        // print!("[");
+        // let mut pos = 0;
+        // for i in 0..M {
+        //     if t[i as usize] != 0.0 { 
+        //         // self.tv[pos] = t[i as usize];
+        //         // self.ti[pos] = i;
+        //         // print!("({:?}, {:?}), ", i,t[i as usize]);
+        //         pos += 1;
+        //     }
+        // }
+        // print!("]");
+        // std::process::exit(0);
         superluminal_perf::end_event();
     }
 
@@ -209,22 +224,24 @@ impl Bacteria {
         let mut p2: i64 = 0;
 
         while p1 < self.count && p2 < rhs.count {
-            let n1 = self.ti[p1 as usize];
-            let n2 = rhs.ti[p2 as usize];
+            // let n1 = self.ti[p1 as usize];
+            // let n2 = rhs.ti[p2 as usize];
+            let (n1, t1) = self.cs[p1 as usize];
+            let (n2, t2) = rhs.cs[p2 as usize];
 
             if n1 < n2 {
-                let t1 = self.tv[p1 as usize];
+                // let t1 = self.tv[p1 as usize];
                 v_len1 += t1 * t1;
                 p1 += 1;
             } else if n2 < n1 {
-                let t2 = rhs.tv[p2 as usize];
+                // let t2 = rhs.tv[p2 as usize];
                 v_len2 += t2 * t2;
                 p2 += 1;
             } else {
-                let t1 = self.tv[p1 as usize];
+                // let t1 = self.tv[p1 as usize];
                 p1 += 1;
 
-                let t2 = rhs.tv[p2 as usize];
+                // let t2 = rhs.tv[p2 as usize];
                 p2 += 1;
 
                 v_len1 += (t1 * t1);
@@ -235,14 +252,16 @@ impl Bacteria {
 
         while p1 < self.count {
             // let n1 = self.ti[p1 as usize]; // does nothing
-            let t1 = self.tv[p1 as usize];
+            // let t1 = self.tv[p1 as usize];
+            let (_, t1) = self.cs[p1 as usize];
             p1 += 1;
             v_len1 += t1 * t1;
         }
 
         while p2 < rhs.count {
             // let n2 = rhs.ti[p2 as usize]; // does nothing
-            let t2 = rhs.tv[p2 as usize];
+            // let t2 = rhs.tv[p2 as usize];
+            let (_, t2) = rhs.cs[p2 as usize];
             p2 += 1;
             v_len2 += t2 * t2;
         }
@@ -272,7 +291,7 @@ async fn load_bacteria(
     bacterias: Arc<CHashMap<usize, Bacteria>>
 ) {
     let mut a = vec![0; (M1 + M) as usize];
-    let mut bx = vec![0.0; (M1 + M + AA_NUMBER) as usize];
+    let mut bx = vec![0.0; (M1 + AA_NUMBER) as usize];
 
     while let Ok((index, filename)) = rx.recv().await {
         let mut b = bacterias.remove(&index).unwrap();
@@ -285,7 +304,7 @@ async fn load_bacteria(
         a.clear();
         a.resize((M1 + M) as usize, 0);
         bx.clear();
-        bx.resize((M1 + M + AA_NUMBER) as usize, 0.0);
+        bx.resize((M1 + AA_NUMBER) as usize, 0.0);
     }
 }
 
@@ -310,7 +329,7 @@ async fn main() {
 
     let num = 10;
 
-    for i in 0..num  {
+    for _ in 0..num {
         tokio::spawn(load_bacteria(rx.clone(), tx1.clone(), bacterias.clone()));
     }
 
