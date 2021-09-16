@@ -81,7 +81,7 @@ impl Bacteria {
         self.indexs = (self.indexs % M2) * AA_NUMBER + enc as i64;
         second[self.indexs as usize] += 1;
     }
-
+    #[cfg(target_feature = "avx")]
     async fn read(&mut self, filename: &str, a: &mut [i64], b: &mut [f64]) {
         superluminal_perf::begin_event("file read start");
         let f = File::open(filename).await.unwrap();
@@ -125,32 +125,32 @@ impl Bacteria {
 
         // let mut temp = [0.0; 20];
 
-        // #[cfg(target_feature = "avx")]
-        // unsafe {
-        //     use std::arch::x86_64::*;
-        //     for i in 0..AA_NUMBER / 4 {
-        //         let start = i as usize * 4;
-        //         let a = [
-        //             self.one_l[start] as f64,
-        //             self.one_l[start + 1] as f64,
-        //             self.one_l[start + 2] as f64,
-        //             self.one_l[start + 3] as f64
-        //         ];
-        //         let a = _mm256_loadu_pd(a.as_ptr());
-        //         let b: [f64; 4] = std::mem::transmute([self.total_l as f64; 4]);
-        //         let b = _mm256_loadu_pd(b.as_ptr());
-        //         let c = _mm256_div_pd(a, b);
-        //         let xs: [f64; 4] = std::mem::transmute(c);
-        //         one_l_div_total[start] = xs[0];
-        //         one_l_div_total[start + 1] = xs[1];
-        //         one_l_div_total[start + 2] = xs[2];
-        //         one_l_div_total[start + 3] = xs[3];
-        //     }
-        // }
 
-        for i in 0..AA_NUMBER {
-            one_l_div_total[i as usize] = self.one_l[i as usize] as f64 / self.total_l as f64;
+        unsafe {
+            use std::arch::x86_64::*;
+            for i in 0..AA_NUMBER / 4 {
+                let start = i as usize * 4;
+                let a = [
+                    self.one_l[start] as f64,
+                    self.one_l[start + 1] as f64,
+                    self.one_l[start + 2] as f64,
+                    self.one_l[start + 3] as f64
+                ];
+                let a = _mm256_loadu_pd(a.as_ptr());
+                let b: [f64; 4] = std::mem::transmute([self.total_l as f64; 4]);
+                let b = _mm256_loadu_pd(b.as_ptr());
+                let c = _mm256_div_pd(a, b);
+                let xs: [f64; 4] = std::mem::transmute(c);
+                one_l_div_total[start] = xs[0];
+                one_l_div_total[start + 1] = xs[1];
+                one_l_div_total[start + 2] = xs[2];
+                one_l_div_total[start + 3] = xs[3];
+            }
         }
+
+        // for i in 0..AA_NUMBER {
+        //     one_l_div_total[i as usize] = self.one_l[i as usize] as f64 / self.total_l as f64;
+        // }
 
         for i in 0..M1 {
             second_div_total[i as usize] = second[i as usize] as f64 / total_complement as f64;
@@ -335,7 +335,7 @@ async fn main() {
 
     let t1 = std::time::Instant::now();
 
-    superluminal_perf::begin_event("read input file sse");
+    superluminal_perf::begin_event("read input file");
     let names = read_input_file(tx, "list.txt").await;
     superluminal_perf::end_event();
 
