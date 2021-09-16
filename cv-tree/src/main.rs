@@ -339,6 +339,7 @@ async fn main() {
     let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
     // let mut output = OpenOptions::new().create(true).write(true).open("results_.txt").await;
     let mut buffered = tokio::io::BufWriter::new(stdout());
+    let mut done = Vec::with_capacity(41);
 
     for i in 0..41 {
         bacterias.insert(i, Bacteria::init_vectors());
@@ -362,24 +363,18 @@ async fn main() {
     // while let Some(h) = handles.pop() {
     //     h.await;
     // }
-
-    let mut done = Vec::with_capacity(41);
-    while let Ok((index, filename)) = rx1.recv().await {
-        let mut buf = [0 as u8; 64];
-        for j in &done {
-            let h = tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
-            handles.push(h);
+    tokio::spawn(async move {
+        while let Ok((index, filename)) = rx1.recv().await {
+            let mut buf = [0 as u8; 64];
+            for j in &done {
+                let h = tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
+                handles.push(h);
+            }
+            done.push(index);
+            // print!("loaded {}, {}\n", index, filename);
         }
-        done.push(index);
-        // print!("loaded {}, {}\n", index, filename);
-        let len = write!(&mut buf[..], "loaded {}: {}\n", index, filename).unwrap();
-        buffered.write(&buf[..]).await;
-        // if done.len() == 41 {
-        //     break;
-        // }
-    }
-
-    drop(tx2);
+        drop(tx2);
+    });
 
     // for i in 0..41 {
     //     for j in i + 1..41 {
@@ -394,10 +389,6 @@ async fn main() {
         let mut buf2 = [0 as u8; 64];
         let len = write!(&mut buf2[..], "{:03} {:03} -> {}\n", i, j, res).unwrap();
         buffered.write(&buf2[..]).await;
-        // done2 += 1;
-        // if done2 == 820 {
-        //     break;
-        // }
     }
 
     let t2 = std::time::Instant::now();
