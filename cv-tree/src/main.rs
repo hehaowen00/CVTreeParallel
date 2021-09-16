@@ -4,7 +4,7 @@
 use chashmap::CHashMap;
 use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
-use tokio::fs::File;
+use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 
 const AA_NUMBER: i64 = 20; // number of amino acids
@@ -81,8 +81,9 @@ impl Bacteria {
         self.indexs = (self.indexs % M2) * AA_NUMBER + enc as i64;
         second[self.indexs as usize] += 1;
     }
-    #[cfg(target_feature = "avx")]
-    async fn read(&mut self, filename: &str, a: &mut [i64], b: &mut [f64]) {
+    // #[cfg(target_feature = "avx")]
+    #[target_feature(enable = "avx")]
+    async unsafe fn read(&mut self, filename: &str, a: &mut [i64], b: &mut [f64]) {
         superluminal_perf::begin_event("file read start");
         let f = File::open(filename).await.unwrap();
         let mut s = BufReader::new(f);
@@ -287,7 +288,7 @@ async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str
 
 async fn load_bacteria(
     rx: async_channel::Receiver<(usize, String)>,
-    notifier: async_channel::Sender<usize>,
+    notifier: async_channel::Sender<(usize, String)>,
     bacterias: Arc<CHashMap<usize, Bacteria>>
 ) {
     let mut a = vec![0; (M1 + M) as usize];
@@ -295,11 +296,14 @@ async fn load_bacteria(
 
     while let Ok((index, filename)) = rx.recv().await {
         let mut b = bacterias.remove(&index).unwrap();
-        b.read(&filename, &mut a, &mut bx).await;
-        print!("loaded {}, {}\n", index, filename);
+        unsafe {
+            b.read(&filename, &mut a, &mut bx).await;
+
+        }
+        // print!("loaded {}, {}\n", index, filename);
         
         bacterias.insert(index, b);
-        notifier.send(index).await;
+        notifier.send((index, filename)).await;
 
         a.clear();
         a.resize((M1 + M) as usize, 0);
@@ -308,12 +312,22 @@ async fn load_bacteria(
     }
 }
 
-async fn compare(i: usize, j: usize, bacterias: Arc<CHashMap<usize, Bacteria>>) {
+use tokio::io::stdout;
+use std::io::Write;
+use tokio::io::AsyncWriteExt;
+async fn compare(
+    i: usize,
+    j: usize,
+    bacterias: Arc<CHashMap<usize, Bacteria>>,
+    out: tokio::sync::mpsc::Sender<(usize, usize, f64)>) {
     superluminal_perf::begin_event("compare one");
     let b1 = bacterias.get(&i).unwrap();
     let b2 = bacterias.get(&j).unwrap();
+    let res = b1.compare(&b2);
+    out.send((i, j, res)).await;
     superluminal_perf::end_event(); 
-    print!("{:03} {:03} -> {}\n", i, j, b1.compare(&b2));
+
+    // print!("{:03} {:03} -> {}\n", i, j, b1.compare(&b2));
 }
 
 #[tokio::main]
@@ -322,6 +336,9 @@ async fn main() {
     let mut bacterias = Arc::new(CHashMap::with_capacity(64));
     let (tx, rx) = async_channel::bounded(41);
     let (tx1, rx1) = async_channel::bounded(41);
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
+    // let mut output = OpenOptions::new().create(true).write(true).open("results_.txt").await;
+    let mut buffered = tokio::io::BufWriter::new(stdout());
 
     for i in 0..41 {
         bacterias.insert(i, Bacteria::init_vectors());
@@ -332,6 +349,7 @@ async fn main() {
     for _ in 0..num {
         tokio::spawn(load_bacteria(rx.clone(), tx1.clone(), bacterias.clone()));
     }
+    drop(tx1);
 
     let t1 = std::time::Instant::now();
 
@@ -346,16 +364,22 @@ async fn main() {
     // }
 
     let mut done = Vec::with_capacity(41);
-    while let Ok(index) = rx1.recv().await {
+    while let Ok((index, filename)) = rx1.recv().await {
+        let mut buf = [0 as u8; 64];
         for j in &done {
-            let h = tokio::spawn(compare(index, *j, bacterias.clone()));
+            let h = tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
             handles.push(h);
         }
         done.push(index);
-        if done.len() == 41 {
-            break;
-        }
+        // print!("loaded {}, {}\n", index, filename);
+        let len = write!(&mut buf[..], "loaded {}: {}\n", index, filename).unwrap();
+        buffered.write(&buf[..]).await;
+        // if done.len() == 41 {
+        //     break;
+        // }
     }
+
+    drop(tx2);
 
     // for i in 0..41 {
     //     for j in i + 1..41 {
@@ -363,9 +387,17 @@ async fn main() {
     //         handles.push(h);
     //     }
     // }
+    // stdout().write_all(&buf).await;
 
-    while let Some(h) = handles.pop() {
-        h.await;
+    let mut done2 = 0;
+    while let Some((i, j, res)) = rx2.recv().await {
+        let mut buf2 = [0 as u8; 64];
+        let len = write!(&mut buf2[..], "{:03} {:03} -> {}\n", i, j, res).unwrap();
+        buffered.write(&buf2[..]).await;
+        // done2 += 1;
+        // if done2 == 820 {
+        //     break;
+        // }
     }
 
     let t2 = std::time::Instant::now();
