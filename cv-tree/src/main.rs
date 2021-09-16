@@ -59,7 +59,7 @@ impl Bacteria {
         }
     }
 
-    fn init_buffer(&mut self, s: &[u8], second: &mut [i64]) {
+    fn init_buffer(&mut self, s: &[u8], second: &mut [f64]) {
         self.complement += 1;
         self.indexs = 0;
         for i in 0..LEN - 1 {
@@ -68,10 +68,10 @@ impl Bacteria {
             self.total_l += 1;
             self.indexs = self.indexs * AA_NUMBER as i64 + enc as i64;
         }
-        second[self.indexs as usize] += 1;
+        second[self.indexs as usize] += 1.0;
     }
 
-    fn cont_buffer(&mut self, ch: u8, second: &mut [i64], vector: &mut [i64]) {
+    fn cont_buffer(&mut self, ch: u8, second: &mut [f64], vector: &mut [i64]) {
         let enc = encode(ch as u8);
         self.one_l[enc as usize] += 1;
         self.total_l += 1;
@@ -79,7 +79,7 @@ impl Bacteria {
         vector[index as usize] += 1;
         self.total += 1;
         self.indexs = (self.indexs % M2) * AA_NUMBER + enc as i64;
-        second[self.indexs as usize] += 1;
+        second[self.indexs as usize] += 1.0;
     }
     // #[cfg(target_feature = "avx")]
     #[target_feature(enable = "avx")]
@@ -88,8 +88,9 @@ impl Bacteria {
         let f = File::open(filename).await.unwrap();
         let mut s = BufReader::new(f);
 
-        let (second, vector) = a.split_at_mut(M1 as usize);
-        let (one_l_div_total, second_div_total) = b.split_at_mut(AA_NUMBER as usize);
+        // let (second, vector) = a.split_at_mut(M1 as usize);
+        let vector = a;
+        let (one_l_div_total, second) = b.split_at_mut(AA_NUMBER as usize);
         // let (second_div_total, t) = m2.split_at_mut(M1 as usize);
 
         let mut buf: [u8; (LEN - 1) as usize] = [0; (LEN - 1) as usize];
@@ -154,15 +155,15 @@ impl Bacteria {
         // }
 
         for i in 0..M1 {
-            second_div_total[i as usize] = second[i as usize] as f64 / total_complement as f64;
+            second[i as usize] = second[i as usize] / total_complement as f64;
         }
 
         self.count = 0;
 
         for i in 0..M {
-            let p1 = second_div_total[i_div_aa_number as usize];
+            let p1 = second[i_div_aa_number as usize];
             let p2 = one_l_div_total[i_mod_aa_number as usize];
-            let p3 = second_div_total[i_mod_m1 as usize];
+            let p3 = second[i_mod_m1 as usize];
             let p4 = one_l_div_total[i_div_m1 as usize];
             let sto = (p1 * p2 + p3 * p4) * total_div_2;
 
@@ -291,7 +292,7 @@ async fn load_bacteria(
     notifier: async_channel::Sender<(usize, String)>,
     bacterias: Arc<CHashMap<usize, Bacteria>>
 ) {
-    let mut a = vec![0; (M1 + M) as usize];
+    let mut a = vec![0; (M) as usize];
     let mut bx = vec![0.0; (M1 + AA_NUMBER) as usize];
 
     while let Ok((index, filename)) = rx.recv().await {
@@ -306,7 +307,7 @@ async fn load_bacteria(
         notifier.send((index, filename)).await;
 
         a.clear();
-        a.resize((M1 + M) as usize, 0);
+        a.resize((M) as usize, 0);
         bx.clear();
         bx.resize((M1 + AA_NUMBER) as usize, 0.0);
     }
@@ -326,7 +327,7 @@ async fn compare(
     let res = b1.compare(&b2);
     out.send((i, j, res)).await;
     superluminal_perf::end_event(); 
-
+    
     // print!("{:03} {:03} -> {}\n", i, j, b1.compare(&b2));
 }
 
@@ -337,10 +338,9 @@ async fn main() {
     let (tx, rx) = async_channel::bounded(41);
     let (tx1, rx1) = async_channel::bounded(41);
     let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
-    // let mut output = OpenOptions::new().create(true).write(true).open("results_.txt").await;
-    let mut buffered = tokio::io::BufWriter::new(stdout());
     let mut done = Vec::with_capacity(41);
-
+    let mut buf = Vec::new();
+    
     for i in 0..41 {
         bacterias.insert(i, Bacteria::init_vectors());
     }
@@ -358,41 +358,32 @@ async fn main() {
     let names = read_input_file(tx, "list.txt").await;
     superluminal_perf::end_event();
 
-    // load_bacteria(rx, tx1, bacterias.clone()).await;
-
-    // while let Some(h) = handles.pop() {
-    //     h.await;
-    // }
     tokio::spawn(async move {
+        let mut buf = Vec::new();
         while let Ok((index, filename)) = rx1.recv().await {
-            let mut buf = [0 as u8; 64];
             for j in &done {
                 let h = tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
                 handles.push(h);
             }
             done.push(index);
-            // print!("loaded {}, {}\n", index, filename);
+            write!(&mut buf, "loaded {}, {}\n", index, filename);
         }
+        stdout().write_all(&buf).await;
         drop(tx2);
     });
-
-    // for i in 0..41 {
-    //     for j in i + 1..41 {
-    //         let h = tokio::spawn(compare(i, j, bacterias.clone()));
-    //         handles.push(h);
-    //     }
-    // }
-    // stdout().write_all(&buf).await;
 
     let mut done2 = 0;
     while let Some((i, j, res)) = rx2.recv().await {
         let mut buf2 = [0 as u8; 64];
-        let len = write!(&mut buf2[..], "{:03} {:03} -> {}\n", i, j, res).unwrap();
-        buffered.write(&buf2[..]).await;
+        if i < j {
+            write!(&mut buf, "{:03} {:03} -> {}\n", i, j, res);
+        } else {
+            write!(&mut buf, "{:03} {:03} -> {}\n", j, i, res);
+        }
     }
-
+    std::io::stdout().write_all(&buf);
     let t2 = std::time::Instant::now();
 
     let diff = t2 - t1;
-    println!("{} milliseconds", diff.as_millis());
+    println!("\n{} milliseconds\n", diff.as_millis());
 }
