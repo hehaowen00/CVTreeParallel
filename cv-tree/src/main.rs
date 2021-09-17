@@ -120,39 +120,36 @@ impl Bacteria {
         superluminal_perf::begin_event("precompute");
         let total_complement = self.total + self.complement;
         let total_div_2: f64 = self.total as f64 * 0.5;
-        let mut i_mod_aa_number: i32 = 0;
-        let mut i_div_aa_number: i32 = 0;
+        let mut i_mod_aa_number: i64 = 0;
+        let mut i_div_aa_number: i64 = 0;
         let mut i_mod_m1: i64 = 0;
         let mut i_div_m1: i64 = 0;
 
-        // let mut temp = [0.0; 20];
-
-
-        unsafe {
-            use std::arch::x86_64::*;
-            for i in 0..AA_NUMBER / 4 {
-                let start = i as usize * 4;
-                let a = [
-                    self.one_l[start] as f64,
-                    self.one_l[start + 1] as f64,
-                    self.one_l[start + 2] as f64,
-                    self.one_l[start + 3] as f64
-                ];
-                let a = _mm256_loadu_pd(a.as_ptr());
-                let b: [f64; 4] = std::mem::transmute([self.total_l as f64; 4]);
-                let b = _mm256_loadu_pd(b.as_ptr());
-                let c = _mm256_div_pd(a, b);
-                let xs: [f64; 4] = std::mem::transmute(c);
-                one_l_div_total[start] = xs[0];
-                one_l_div_total[start + 1] = xs[1];
-                one_l_div_total[start + 2] = xs[2];
-                one_l_div_total[start + 3] = xs[3];
-            }
-        }
-
-        // for i in 0..AA_NUMBER {
-        //     one_l_div_total[i as usize] = self.one_l[i as usize] as f64 / self.total_l as f64;
+        // unsafe {
+        //     use std::arch::x86_64::*;
+        //     for i in 0..AA_NUMBER / 4 {
+        //         let start = i as usize * 4;
+        //         let a = [
+        //             self.one_l[start] as f64,
+        //             self.one_l[start + 1] as f64,
+        //             self.one_l[start + 2] as f64,
+        //             self.one_l[start + 3] as f64
+        //         ];
+        //         let a = _mm256_loadu_pd(a.as_ptr());
+        //         let b: [f64; 4] = std::mem::transmute([self.total_l as f64; 4]);
+        //         let b = _mm256_loadu_pd(b.as_ptr());
+        //         let c = _mm256_div_pd(a, b);
+        //         let xs: [f64; 4] = std::mem::transmute(c);
+        //         one_l_div_total[start] = xs[0];
+        //         one_l_div_total[start + 1] = xs[1];
+        //         one_l_div_total[start + 2] = xs[2];
+        //         one_l_div_total[start + 3] = xs[3];
+        //     }
         // }
+
+        for i in 0..AA_NUMBER {
+            one_l_div_total[i as usize] = self.one_l[i as usize] as f64 / self.total_l as f64;
+        }
 
         for i in 0..M1 {
             second[i as usize] = second[i as usize] / total_complement as f64;
@@ -161,25 +158,30 @@ impl Bacteria {
         self.count = 0;
 
         for i in 0..M {
+            i_div_m1 = i as i64 / M1 as i64;
+            i_mod_m1 = i as i64 % M1 as i64;
+            i_div_aa_number = i / AA_NUMBER;
+            i_mod_aa_number = i % AA_NUMBER;
+
             let p1 = second[i_div_aa_number as usize];
             let p2 = one_l_div_total[i_mod_aa_number as usize];
             let p3 = second[i_mod_m1 as usize];
             let p4 = one_l_div_total[i_div_m1 as usize];
             let sto = (p1 * p2 + p3 * p4) * total_div_2;
+            
+            // if i_mod_aa_number == AA_NUMBER as i32 - 1 {
+            //     i_mod_aa_number = 0;
+            //     i_div_aa_number += 1;
+            // } else {
+            //     i_mod_aa_number += 1;
+            // }
 
-            if i_mod_aa_number == AA_NUMBER as i32 - 1 {
-                i_mod_aa_number = 0;
-                i_div_aa_number += 1;
-            } else {
-                i_mod_aa_number += 1;
-            }
-
-            if i_mod_m1 == M1 - 1 {
-                i_mod_m1 = 0;
-                i_div_m1 += 1;
-            } else {
-                i_mod_m1 += 1;
-            }
+            // if i_mod_m1 == M1 - 1 {
+            //     i_mod_m1 = 0;
+            //     i_div_m1 += 1;
+            // } else {
+            //     i_mod_m1 += 1;
+            // }
 
             // if sto > EPSILON {
             //     t[i as usize] = (vector[i as usize] as f64 - sto) / sto;
@@ -345,7 +347,7 @@ async fn main() {
     let (tx1, rx1) = async_channel::bounded(41);
     let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
     let mut done = Vec::with_capacity(41);
-    let mut buf = Vec::new();
+    let mut buf = Vec::with_capacity(27000);
     
     for i in 0..41 {
         bacterias.insert(i, Bacteria::init_vectors());
@@ -365,7 +367,7 @@ async fn main() {
     superluminal_perf::end_event();
 
     tokio::spawn(async move {
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(1100);
         while let Ok((index, filename)) = rx1.recv().await {
             for j in &done {
                 let h = tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
