@@ -1,11 +1,15 @@
 #![feature(const_for)]
 #![feature(const_mut_refs)]
 
-use chashmap::CHashMap;
+// use chashmap::CHashMap;
 use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::io::stdout;
+use std::io::Write;
+use tokio::io::AsyncWriteExt;
+use tokio::sync::RwLock;
 
 const AA_NUMBER: i64 = 20; // number of amino acids
 const LEN: i64 = 6;
@@ -298,20 +302,20 @@ async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str
 async fn load_bacteria(
     rx: async_channel::Receiver<(usize, String)>,
     notifier: async_channel::Sender<(usize, String)>,
-    bacterias: Arc<CHashMap<usize, Bacteria>>
+    bacterias: Arc<Vec<RwLock<Bacteria>>>
 ) {
     let mut a = vec![0; (M) as usize];
     let mut bx = vec![0.0; (M1 + AA_NUMBER) as usize];
 
     while let Ok((index, filename)) = rx.recv().await {
-        let mut b = bacterias.remove(&index).unwrap();
+        // let mut b = bacterias.remove(&index).unwrap();
+        let mut b = bacterias[index].write().await;
         unsafe {
             b.read(&filename, &mut a, &mut bx).await;
-
         }
         // print!("loaded {}, {}\n", index, filename);
         
-        bacterias.insert(index, b);
+        // bacterias.insert(index, b);
         notifier.send((index, filename)).await;
 
         a.clear();
@@ -321,17 +325,17 @@ async fn load_bacteria(
     }
 }
 
-use tokio::io::stdout;
-use std::io::Write;
-use tokio::io::AsyncWriteExt;
+
 async fn compare(
     i: usize,
     j: usize,
-    bacterias: Arc<CHashMap<usize, Bacteria>>,
+    bacterias: Arc<Vec<RwLock<Bacteria>>>,
     out: tokio::sync::mpsc::Sender<(usize, usize, f64)>) {
     superluminal_perf::begin_event("compare one");
-    let b1 = bacterias.get(&i).unwrap();
-    let b2 = bacterias.get(&j).unwrap();
+    // let b1 = bacterias.get(&i).unwrap();
+    // let b2 = bacterias.get(&j).unwrap();
+    let b1 = bacterias[i].read().await;
+    let b2 = bacterias[j].read().await;
     let res = b1.compare(&b2);
     out.send((i, j, res)).await;
     superluminal_perf::end_event(); 
@@ -342,16 +346,21 @@ async fn compare(
 #[tokio::main]
 async fn main() {
     let mut handles = Vec::with_capacity(8);
-    let mut bacterias = Arc::new(CHashMap::with_capacity(64));
+    // let mut bacterias = Arc::new(CHashMap::with_capacity(64));
+    let mut bacterias_ = Vec::with_capacity(41);
+    for _ in 0..41 {
+        bacterias_.push(RwLock::new(Bacteria::init_vectors()));
+    }
+    let bacterias = Arc::new(bacterias_);
     let (tx, rx) = async_channel::bounded(41);
     let (tx1, rx1) = async_channel::bounded(41);
     let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
     let mut done = Vec::with_capacity(41);
     let mut buf = Vec::with_capacity(27000);
     
-    for i in 0..41 {
-        bacterias.insert(i, Bacteria::init_vectors());
-    }
+    // for i in 0..41 {
+    //     bacterias.insert(i, Bacteria::init_vectors());
+    // }
 
     let num = 10;
 
