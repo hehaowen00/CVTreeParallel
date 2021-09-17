@@ -90,7 +90,7 @@ impl Bacteria {
         second[self.indexs as usize] += 1.0;
     }
     // #[cfg(target_feature = "avx")]
-    #[target_feature(enable = "avx")]
+    // #[target_feature(enable = "avx")]
     async unsafe fn read(&mut self, filename: &str, a: &mut [i64], b: &mut [f64]) {
         superluminal_perf::begin_event("file read start");
         let f = File::open(filename).await.unwrap();
@@ -306,16 +306,16 @@ async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str
 async fn load_bacteria(
     rx: async_channel::Receiver<(usize, String)>,
     notifier: async_channel::Sender<(usize, String)>,
-    bacterias: Arc<Vec<RwLock<Bacteria>>>
+    bacterias: Arc<RwLock<Vec<Bacteria>>>
 ) {
     let mut a = vec![0; (M) as usize];
     let mut bx = vec![0.0; (M1 + AA_NUMBER) as usize];
 
     while let Ok((index, filename)) = rx.recv().await {
         // let mut b = bacterias.remove(&index).unwrap();
-        let mut b = bacterias[index].write().await;
+        let mut b = bacterias.write().await;
         unsafe {
-            b.read(&filename, &mut a, &mut bx).await;
+            b[index].read(&filename, &mut a, &mut bx).await;
         }
 
         drop(b);
@@ -351,19 +351,18 @@ async fn compare(
 
 #[tokio::main]
 async fn main() {
-    let t1 = std::time::Instant::now();
-    let mut handles = Vec::with_capacity(8);
+    // let mut handles = Vec::with_capacity(8);
     // let mut bacterias = Arc::new(CHashMap::with_capacity(64));
     let mut bacterias_ = Vec::with_capacity(41);
     for _ in 0..41 {
-        bacterias_.push(RwLock::new(Bacteria::init_vectors()));
+        bacterias_.push(Bacteria::init_vectors());
     }
-    let bacterias = Arc::new(bacterias_);
+    let bacterias = Arc::new(RwLock::new(bacterias_));
     let (tx, rx) = async_channel::bounded(41);
     let (tx1, rx1) = async_channel::bounded(41);
     let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
     let mut done = Vec::with_capacity(41);
-    let mut buf = Vec::with_capacity(27000);
+    // let mut buf = Vec::with_capacity(27000);
     
     // for i in 0..41 {
     //     bacterias.insert(i, Bacteria::init_vectors());
@@ -382,27 +381,40 @@ async fn main() {
     read_input_file(tx, "list.txt").await;
     superluminal_perf::end_event();
 
+    let t1 = std::time::Instant::now();
     tokio::spawn(async move {
         let mut buf = Vec::with_capacity(1100);
         while let Ok((index, filename)) = rx1.recv().await {
-            for j in &done {
-                tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
-            }
+            // for j in &done {
+            //     tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
+            // }
             done.push(index);
             let _ = write!(&mut buf, "loaded {}, {}\n", index, filename);
         }
+    
+        tx2.send(true).await;
         let _ = stdout().write_all(&buf).await;
-        drop(tx2);
+        // drop(tx2);
     });
 
-    while let Some((i, j, res)) = rx2.recv().await {
-        if i < j {
-            let _ = write!(&mut buf, "{:03} {:03} -> {}\n", i, j, res);
-        } else {
-            let _ = write!(&mut buf, "{:03} {:03} -> {}\n", j, i, res);
+    use rayon::prelude::*;
+    if let Some(true) = rx2.recv().await {
+        let mut results = Vec::new();
+        for i in 0..40 {
+            let b = bacterias.read().await;
+            &b[i+1..].par_iter().map(|l| l.compare(&b[i])).collect_into_vec(&mut results);
+            println!("{:?}", results);
         }
     }
-    let _ = std::io::stdout().write_all(&buf);
+
+    // while let Some((i, j, res)) = rx2.recv().await {
+    //     if i < j {
+    //         let _ = write!(&mut buf, "{:03} {:03} -> {}\n", i, j, res);
+    //     } else {
+    //         let _ = write!(&mut buf, "{:03} {:03} -> {}\n", j, i, res);
+    //     }
+    // }
+    // let _ = std::io::stdout().write_all(&buf);
     let t2 = std::time::Instant::now();
 
     let diff = t2 - t1;
