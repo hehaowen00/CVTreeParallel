@@ -56,7 +56,7 @@ impl Bacteria {
     fn init_vectors() -> Self {
         Self {
             count: 0,
-            one_l: [0; (AA_NUMBER as usize)].to_vec(),
+            one_l: vec![0; (AA_NUMBER as usize)],
             total: 0,
             total_l: 0,
             complement: 0,
@@ -128,10 +128,10 @@ impl Bacteria {
         superluminal_perf::begin_event("precompute");
         let total_complement = self.total + self.complement;
         let total_div_2: f64 = self.total as f64 * 0.5;
-        let mut i_mod_aa_number: i64 = 0;
-        let mut i_div_aa_number: i64 = 0;
-        let mut i_mod_m1: i64 = 0;
-        let mut i_div_m1: i64 = 0;
+        // let mut i_mod_aa_number: i64 = 0;
+        // let mut i_div_aa_number: i64 = 0;
+        // let mut i_mod_m1: i64 = 0;
+        // let mut i_div_m1: i64 = 0;
 
         // unsafe {
         //     use std::arch::x86_64::*;
@@ -166,10 +166,10 @@ impl Bacteria {
         self.count = 0;
 
         for i in 0..M {
-            i_div_m1 = i as i64 / M1 as i64;
-            i_mod_m1 = i as i64 % M1 as i64;
-            i_div_aa_number = i / AA_NUMBER;
-            i_mod_aa_number = i % AA_NUMBER;
+            let i_div_m1 = i as i64 / M1 as i64;
+            let i_mod_m1 = i as i64 - (M1 as i64 * i_div_m1);
+            let i_div_aa_number = i / AA_NUMBER;
+            let i_mod_aa_number = i - (AA_NUMBER * i_div_aa_number);
 
             let p1 = second[i_div_aa_number as usize];
             let p2 = one_l_div_total[i_mod_aa_number as usize];
@@ -256,8 +256,8 @@ impl Bacteria {
                 // let t2 = rhs.tv[p2 as usize];
                 p2 += 1;
 
-                v_len1 += (t1 * t1);
-                v_len2 += (t2 * t2);
+                v_len1 += t1 * t1;
+                v_len2 += t2 * t2;
                 correlation += t1 * t2;
             }
         }
@@ -322,7 +322,7 @@ async fn load_bacteria(
         // print!("loaded {}, {}\n", index, filename);
         
         // bacterias.insert(index, b);
-        notifier.send((index, filename)).await;
+        let _ = notifier.send((index, filename)).await;
 
         a.clear();
         a.resize((M) as usize, 0);
@@ -379,33 +379,30 @@ async fn main() {
     // let t1 = std::time::Instant::now();
 
     superluminal_perf::begin_event("read input file");
-    let names = read_input_file(tx, "list.txt").await;
+    read_input_file(tx, "list.txt").await;
     superluminal_perf::end_event();
 
     tokio::spawn(async move {
         let mut buf = Vec::with_capacity(1100);
         while let Ok((index, filename)) = rx1.recv().await {
             for j in &done {
-                let h = tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
-                handles.push(h);
+                tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
             }
             done.push(index);
-            write!(&mut buf, "loaded {}, {}\n", index, filename);
+            let _ = write!(&mut buf, "loaded {}, {}\n", index, filename);
         }
-        stdout().write_all(&buf).await;
+        let _ = stdout().write_all(&buf).await;
         drop(tx2);
     });
 
-    let mut done2 = 0;
     while let Some((i, j, res)) = rx2.recv().await {
-        let mut buf2 = [0 as u8; 64];
         if i < j {
-            write!(&mut buf, "{:03} {:03} -> {}\n", i, j, res);
+            let _ = write!(&mut buf, "{:03} {:03} -> {}\n", i, j, res);
         } else {
-            write!(&mut buf, "{:03} {:03} -> {}\n", j, i, res);
+            let _ = write!(&mut buf, "{:03} {:03} -> {}\n", j, i, res);
         }
     }
-    std::io::stdout().write_all(&buf);
+    let _ = std::io::stdout().write_all(&buf);
     let t2 = std::time::Instant::now();
 
     let diff = t2 - t1;
