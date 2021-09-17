@@ -18,16 +18,20 @@ const CODE: [i8; 26] = [
     0, 2, 1, 2, 3, 4, 5, 6, 7, -1, 8, 9, 10, 11, -1, 12, 13, 14, 15, 16, 1, 17, 18, 5, 19, 3,
 ];
 
-const M2: i64 = {
-    let mut i = 1;
-    let mut j = 0;
+const M2: i64 = AA_NUMBER.pow((LEN-2) as u32);
+// {
+    // let mut i = 1;
+    // let mut j = 0;
 
-    while j < LEN - 2 {
-        i *= AA_NUMBER;
-        j += 1;
-    }
-    i
-}; // number of different possible 4-mers
+    // while j < LEN - 2 {
+    //     i *= AA_NUMBER;
+    //     j += 1;
+    // }
+
+    // AA_NUMBER.pow((LEN-2) as u32)
+
+    // i
+// }; // number of different possible 4-mers
 const M1: i64 = M2 * AA_NUMBER; // number of different possible 5-mers
 const M: i64 = M1 * AA_NUMBER; // number of different possible 6-mers
 
@@ -313,6 +317,8 @@ async fn load_bacteria(
         unsafe {
             b.read(&filename, &mut a, &mut bx).await;
         }
+
+        drop(b);
         // print!("loaded {}, {}\n", index, filename);
         
         // bacterias.insert(index, b);
@@ -345,6 +351,7 @@ async fn compare(
 
 #[tokio::main]
 async fn main() {
+    let t1 = std::time::Instant::now();
     let mut handles = Vec::with_capacity(8);
     // let mut bacterias = Arc::new(CHashMap::with_capacity(64));
     let mut bacterias_ = Vec::with_capacity(41);
@@ -369,7 +376,7 @@ async fn main() {
     }
     drop(tx1);
 
-    let t1 = std::time::Instant::now();
+    // let t1 = std::time::Instant::now();
 
     superluminal_perf::begin_event("read input file");
     let names = read_input_file(tx, "list.txt").await;
