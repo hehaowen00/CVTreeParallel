@@ -252,21 +252,27 @@ impl Bacteria {
             }
         }
 
-        while p1 < self.count {
-            // let n1 = self.ti[p1 as usize]; // does nothing
-            // let t1 = self.tv[p1 as usize];
-            let (_, t1) = self.cs[p1 as usize];
-            p1 += 1;
-            v_len1 += t1 * t1;
-        }
+        // while p1 < self.count {
+        //     // let n1 = self.ti[p1 as usize]; // does nothing
+        //     // let t1 = self.tv[p1 as usize];
+        //     let (_, t1) = self.cs[p1 as usize];
+        //     p1 += 1;
+        //     v_len1 += t1 * t1;
+        // }
 
-        while p2 < rhs.count {
-            // let n2 = rhs.ti[p2 as usize]; // does nothing
-            // let t2 = rhs.tv[p2 as usize];
-            let (_, t2) = rhs.cs[p2 as usize];
-            p2 += 1;
-            v_len2 += t2 * t2;
-        }
+        // while p2 < rhs.count {
+        //     // let n2 = rhs.ti[p2 as usize]; // does nothing
+        //     // let t2 = rhs.tv[p2 as usize];
+        //     let (_, t2) = rhs.cs[p2 as usize];
+        //     p2 += 1;
+        //     v_len2 += t2 * t2;
+        // }
+
+        let total: f64 = self.cs[p1 as usize..].iter().map(|(_, v)| v * v).sum();
+        v_len1 += total;
+        
+        let total: f64 = rhs.cs[p2 as usize..].iter().map(|(_, v)| v * v).sum();
+        v_len2 += total;
 
         let res = correlation / (v_len1.sqrt() * v_len2.sqrt());
         superluminal_perf::end_event();
