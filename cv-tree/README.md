@@ -1,0 +1,3 @@
+```
+$env:RUSTFLAGS="-C target-cpu=native"
+```
