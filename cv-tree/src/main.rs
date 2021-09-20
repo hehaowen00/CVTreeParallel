@@ -1,11 +1,8 @@
-#![feature(const_for)]
-#![feature(const_mut_refs)]
-
 use std::io::Write;
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, stdout};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc::Sender};
 
 const AA_NUMBER: i64 = 20; // number of amino acids
 const LEN: i64 = 6;
@@ -69,7 +66,6 @@ impl Bacteria {
         second[self.indexs as usize] += 1.0;
     }
 
-    // #[target_feature(enable = "avx")]
     async unsafe fn read(&mut self, filename: &str, a: &mut [i64], b: &mut [f64]) {
         superluminal_perf::begin_event("file read start");
         let f = File::open(filename).await.unwrap();
@@ -96,7 +92,6 @@ impl Bacteria {
 
             sink.clear();
         }
-
         superluminal_perf::end_event();
 
         superluminal_perf::begin_event("precompute");
@@ -190,7 +185,7 @@ async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str
 
 async fn load_bacteria(
     rx: async_channel::Receiver<(usize, String)>,
-    notifier: tokio::sync::mpsc::Sender<(usize, String)>,
+    notifier: Sender<(usize, String)>,
     bacterias: Arc<Vec<RwLock<Bacteria>>>
 ) {
     let mut a = vec![0; (M) as usize];
@@ -217,7 +212,7 @@ async fn compare(
     i: usize,
     j: usize,
     bacterias: Arc<Vec<RwLock<Bacteria>>>,
-    out: tokio::sync::mpsc::Sender<(usize, usize, f64)>) {
+    out: Sender<(usize, usize, f64)>) {
     superluminal_perf::begin_event("compare one");
     let b1 = bacterias[i].read().await;
     let b2 = bacterias[j].read().await;
@@ -236,11 +231,11 @@ async fn main() {
     let (tx, rx) = async_channel::bounded(41);
     let (tx1, mut rx1) = tokio::sync::mpsc::channel(41);
     let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
+
     let mut done = Vec::with_capacity(41);
     let mut buf = Vec::with_capacity(27000);
     
-    let num = 10;
-    
+    let num = 10; // number of cores + 2
     for _ in 0..num {
         tokio::spawn(load_bacteria(rx.clone(), tx1.clone(), bacterias.clone()));
     }
