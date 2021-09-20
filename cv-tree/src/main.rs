@@ -190,7 +190,7 @@ async fn read_input_file(tx: async_channel::Sender<(usize, String)>, fname: &str
 
 async fn load_bacteria(
     rx: async_channel::Receiver<(usize, String)>,
-    notifier: async_channel::Sender<(usize, String)>,
+    notifier: tokio::sync::mpsc::Sender<(usize, String)>,
     bacterias: Arc<Vec<RwLock<Bacteria>>>
 ) {
     let mut a = vec![0; (M) as usize];
@@ -234,7 +234,7 @@ async fn main() {
     }
     let bacterias = Arc::new(bacterias_);
     let (tx, rx) = async_channel::bounded(41);
-    let (tx1, rx1) = async_channel::bounded(41);
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel(41);
     let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
     let mut done = Vec::with_capacity(41);
     let mut buf = Vec::with_capacity(27000);
@@ -253,7 +253,7 @@ async fn main() {
 
     tokio::spawn(async move {
         let mut buf = Vec::with_capacity(1100);
-        while let Ok((index, filename)) = rx1.recv().await {
+        while let Some((index, filename)) = rx1.recv().await {
             for j in &done {
                 tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
             }
