@@ -221,54 +221,63 @@ async fn compare(
     out.send((i, j, res)).await;
 }
 
-#[tokio::main]
-async fn main() {
-    let mut bacterias_ = Vec::with_capacity(41);
-    for _ in 0..41 {
-        bacterias_.push(RwLock::new(Bacteria::init_vectors()));
-    }
-    let bacterias = Arc::new(bacterias_);
-    let (tx, rx) = async_channel::bounded(41);
-    let (tx1, mut rx1) = tokio::sync::mpsc::channel(41);
-    let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
+fn main() {
+    let cores = 8;
 
-    let mut done = Vec::with_capacity(41);
-    let mut buf = Vec::with_capacity(27000);
-    
-    let num = 10; // number of cores + 2
-    for _ in 0..num {
-        tokio::spawn(load_bacteria(rx.clone(), tx1.clone(), bacterias.clone()));
-    }
-    drop(tx1);
-    
-    let t1 = std::time::Instant::now();
-    superluminal_perf::begin_event("read input file");
-    read_input_file(tx, "list.txt").await;
-    superluminal_perf::end_event();
+    let mut rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(cores)
+        .enable_all()
+        .build()
+        .unwrap();
 
-    tokio::spawn(async move {
-        let mut buf = Vec::with_capacity(1100);
-        while let Some((index, filename)) = rx1.recv().await {
-            for j in &done {
-                tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
+    rt.block_on(async move {
+        let mut bacterias_ = Vec::with_capacity(41);
+        for _ in 0..41 {
+            bacterias_.push(RwLock::new(Bacteria::init_vectors()));
+        }
+        let bacterias = Arc::new(bacterias_);
+        let (tx, rx) = async_channel::bounded(41);
+        let (tx1, mut rx1) = tokio::sync::mpsc::channel(41);
+        let (tx2, mut rx2) = tokio::sync::mpsc::channel(820);
+
+        let mut done = Vec::with_capacity(41);
+        let mut buf = Vec::with_capacity(27000);
+        
+        let num = cores + 2;
+        for _ in 0..num {
+            tokio::spawn(load_bacteria(rx.clone(), tx1.clone(), bacterias.clone()));
+        }
+        drop(tx1);
+        
+        let t1 = std::time::Instant::now();
+        superluminal_perf::begin_event("read input file");
+        read_input_file(tx, "list.txt").await;
+        superluminal_perf::end_event();
+
+        tokio::spawn(async move {
+            let mut buf = Vec::with_capacity(1100);
+            while let Some((index, filename)) = rx1.recv().await {
+                for j in &done {
+                    tokio::spawn(compare(index, *j, bacterias.clone(), tx2.clone()));
+                }
+                done.push(index);
+                write!(&mut buf, "loaded {}, {}\n", index, filename);
             }
-            done.push(index);
-            write!(&mut buf, "loaded {}, {}\n", index, filename);
+            stdout().write_all(&buf).await;
+            drop(tx2);
+        });
+
+        while let Some((i, j, res)) = rx2.recv().await {
+            if i < j {
+                write!(&mut buf, "{:03} {:03} -> {:.10}\n", i, j, res);
+            } else {
+                write!(&mut buf, "{:03} {:03} -> {:.10}\n", j, i, res);
+            }
         }
-        stdout().write_all(&buf).await;
-        drop(tx2);
+        std::io::stdout().write_all(&buf);
+        let t2 = std::time::Instant::now();
+
+        let diff = t2 - t1;
+        println!("\n{} milliseconds\n", diff.as_millis());
     });
-
-    while let Some((i, j, res)) = rx2.recv().await {
-        if i < j {
-            write!(&mut buf, "{:03} {:03} -> {:.10}\n", i, j, res);
-        } else {
-            write!(&mut buf, "{:03} {:03} -> {:.10}\n", j, i, res);
-        }
-    }
-    std::io::stdout().write_all(&buf);
-    let t2 = std::time::Instant::now();
-
-    let diff = t2 - t1;
-    println!("\n{} milliseconds\n", diff.as_millis());
 }
